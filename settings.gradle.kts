@@ -22,5 +22,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "MinhasFinancas"
+rootProject.name = "Blik"
 include(":app")

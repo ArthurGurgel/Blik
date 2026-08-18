@@ -5,13 +5,13 @@ plugins {
 }
 
 android {
-    namespace = "com.example.minhasfinancas"
+    namespace = "com.example.blik"
     compileSdk {
         version = release(37)
     }
 
     defaultConfig {
-        applicationId = "com.example.minhasfinancas"
+        applicationId = "com.example.blik"
         minSdk = 23
         targetSdk = 37
         versionCode = 1

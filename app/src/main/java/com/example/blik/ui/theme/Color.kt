@@ -1,4 +1,4 @@
-package com.example.minhasfinancas.ui.theme
+package com.example.blik.ui.theme
 
 import androidx.compose.ui.graphics.Color
 

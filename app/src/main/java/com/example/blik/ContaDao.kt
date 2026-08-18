@@ -1,4 +1,4 @@
-package com.example.minhasfinancas
+package com.example.blik
 
 import androidx.room.Dao
 import androidx.room.Insert
@@ -83,5 +83,17 @@ interface ContaDao {
     )
     suspend fun existeNome(nome: String): Int
 
+    @Query(
+        """
+        SELECT *
+        FROM contas
+        WHERE id = :id
+        LIMIT 1
+        """
+
+    )
+    suspend fun buscarPorId(
+        id: Int
+    ): ContaEntity?
 }
 

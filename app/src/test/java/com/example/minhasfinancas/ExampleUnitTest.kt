@@ -1,4 +1,4 @@
-package com.example.minhasfinancas
+package com.example.blik
 
 import org.junit.Test
 

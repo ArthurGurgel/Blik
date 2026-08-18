@@ -1,4 +1,4 @@
-package com.example.minhasfinancas
+package com.example.blik
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -34,15 +34,17 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.platform.LocalContext
 import androidx.room.Room
+import com.example.blik.ui.theme.BlikTheme
 import kotlinx.coroutines.launch
-import com.example.minhasfinancas.ui.theme.MinhasFinancasTheme
 
 data class Movimentacao(
     val descricao: String,
     val valor: Double,
     val tipo: String,
-    val conta: String,
+    val contaId: Int,
+    val contaNome: String,
     val categoria: String,
     val data: String
 )
@@ -53,7 +55,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
 
         setContent {
-            MinhasFinancasTheme {
+            BlikTheme {
                 AppFinanceiro()
             }
         }
@@ -63,13 +65,13 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun AppFinanceiro() {
 
-    val context = androidx.compose.ui.platform.LocalContext.current
+    val context = LocalContext.current
 
     val banco = remember {
         Room.databaseBuilder(
             context,
             AppDatabase::class.java,
-            "minhas_financas.db"
+            "blik.db"
         )
             .fallbackToDestructiveMigration(true)
             .build()
@@ -106,14 +108,16 @@ fun AppFinanceiro() {
         mutableStateOf("inicio")
     }
 
-    val movimentacoes = movimentacoesEntity.map {
+    val movimentacoes = movimentacoesEntity.map { item ->
+
         Movimentacao(
-            descricao = it.descricao,
-            valor = it.valor,
-            tipo = it.tipo,
-            conta = it.conta,
-            categoria = it.categoria,
-            data = it.data
+            descricao = item.descricao,
+            valor = item.valor,
+            tipo = item.tipo,
+            contaId = item.contaId,
+            contaNome = item.contaNome,
+            categoria = item.categoria,
+            data = item.data
         )
     }
 
@@ -143,7 +147,7 @@ fun AppFinanceiro() {
                                 descricao = novaMovimentacao.descricao,
                                 valor = novaMovimentacao.valor,
                                 tipo = novaMovimentacao.tipo,
-                                conta = novaMovimentacao.conta,
+                                contaId = novaMovimentacao.contaId,
                                 categoria = novaMovimentacao.categoria,
                                 data = novaMovimentacao.data
                             )
@@ -198,7 +202,7 @@ fun AppFinanceiro() {
                 onExcluir = { conta, resultado ->
                     scope.launch {
                         val quantidadeMovimentacoes =
-                            dao.quantidadePorConta(conta.nome)
+                            dao.quantidadePorConta(conta.id)
 
                         if (quantidadeMovimentacoes > 0){
                             resultado(
@@ -244,7 +248,7 @@ fun TelaInicial(
         ) {
 
             Text(
-                text = "Minhas Finanças",
+                text = "Blik",
                 fontSize = 28.sp,
                 fontWeight = FontWeight.Bold
             )
@@ -360,18 +364,22 @@ fun TelaInicial(
                 )
             } else {
                 movimentacoes.forEach { movimentacao ->
+
                     Card(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(vertical = 4.dp)
                     ) {
+
                         Column(
                             modifier = Modifier.padding(16.dp)
                         ) {
+
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.SpaceBetween
                             ) {
+
                                 Text(
                                     text = movimentacao.descricao,
                                     fontWeight = FontWeight.Bold
@@ -389,8 +397,9 @@ fun TelaInicial(
                             }
 
                             Text(
-                                text = "${movimentacao.conta} * ${movimentacao.categoria}"
+                                text = "${movimentacao.contaNome} • ${movimentacao.categoria}"
                             )
+
                             Text(
                                 text = movimentacao.data,
                                 fontSize = 12.sp
@@ -439,16 +448,16 @@ fun TelaNovaMovimentacao(
         mutableStateOf("")
     }
 
-    var conta by remember {
-        mutableStateOf("")
+    var contaSelecionada by remember {
+        mutableStateOf<ContaEntity?>(null)
     }
 
     LaunchedEffect(contas) {
         if (
-            conta.isBlank() &&
+            contaSelecionada == null &&
             contas.isNotEmpty()
         ) {
-            conta = contas.first().nome
+            contaSelecionada = contas.first()
         }
     }
 
@@ -581,7 +590,10 @@ fun TelaNovaMovimentacao(
                     },
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text("Conta: $conta")
+                    Text(
+                        text =
+                            "Conta: ${contaSelecionada?.nome ?: "Selecione"}"
+                    )
                 }
 
                 DropdownMenu(
@@ -598,7 +610,7 @@ fun TelaNovaMovimentacao(
                                 Text(contaBanco.nome)
                             },
                             onClick = {
-                                conta = contaBanco.nome
+                                contaSelecionada = contaBanco
                                 menuContaAberto = false
                             }
                         )
@@ -666,7 +678,7 @@ fun TelaNovaMovimentacao(
             )
 
             Text(
-                text = "Conta: $conta"
+                text = "Conta: ${contaSelecionada?.nome ?: "Nenhuma"}"
             )
 
             Text(
@@ -682,18 +694,23 @@ fun TelaNovaMovimentacao(
 
                     val valorConvertido =
                         valor
-                            .replace(",",".")
+                            .replace(",", ".")
                             .toDoubleOrNull()
+
+                    val contaEscolhida = contaSelecionada
 
                     if (
                         descricao.isNotBlank() &&
-                        valorConvertido != null
+                        valorConvertido != null &&
+                        contaEscolhida != null
                     ) {
+
                         val movimentacao = Movimentacao(
                             descricao = descricao,
                             valor = valorConvertido,
                             tipo = tipo,
-                            conta = conta,
+                            contaId = contaEscolhida.id,
+                            contaNome = contaEscolhida.nome,
                             categoria = categoria,
                             data = data
                         )
