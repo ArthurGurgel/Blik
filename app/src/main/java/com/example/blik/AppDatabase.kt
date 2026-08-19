@@ -6,12 +6,14 @@ import androidx.room.RoomDatabase
 @Database(
     entities = [
         MovimentacaoEntity::class,
-        ContaEntity::class
+        ContaEntity::class,
+        CategoriaEntity::class
     ],
-    version = 4,
+    version = 6,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
     abstract fun movimentacaoDao(): MovimentacaoDao
     abstract fun contaDao(): ContaDao
+    abstract fun categoriaDao(): CategoriaDao
 }

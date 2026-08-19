@@ -13,10 +13,18 @@ import androidx.room.PrimaryKey
             parentColumns = ["id"],
             childColumns = ["contaId"],
             onDelete = ForeignKey.RESTRICT
+        ),
+
+        ForeignKey(
+            entity = CategoriaEntity::class,
+            parentColumns = ["id"],
+            childColumns = ["categoriaId"],
+            onDelete = ForeignKey.RESTRICT
         )
     ],
     indices = [
-        Index(value = ["contaId"])
+        Index(value = ["contaId"]),
+        Index(value = ["categoriaId"])
     ]
 )
 data class MovimentacaoEntity(
@@ -28,6 +36,6 @@ data class MovimentacaoEntity(
     val valor: Double,
     val tipo: String,
     val contaId: Int,
-    val categoria: String,
+    val categoriaId: Int,
     val data: String
 )

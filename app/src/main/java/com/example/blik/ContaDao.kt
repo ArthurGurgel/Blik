@@ -95,5 +95,32 @@ interface ContaDao {
     suspend fun buscarPorId(
         id: Int
     ): ContaEntity?
+
+    @Query(
+        """
+        UPDATE contas
+        SET nome = :novoNome
+        WHERE id = :id
+        """
+    )
+    suspend fun editarNome(
+        id: Int,
+        novoNome: String
+    )
+
+    @Query(
+        """
+        SELECT COUNT(*)
+        FROM contas
+        WHERE LOWER(nome) = LOWER(:nome)
+        AND id != :idAtual
+        """
+    )
+    suspend fun existeOutroNome(
+        nome: String,
+        idAtual: Int
+    ): Int
+
+
 }
 

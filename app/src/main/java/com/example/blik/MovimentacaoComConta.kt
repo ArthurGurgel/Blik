@@ -7,6 +7,7 @@ data class MovimentacaoComConta(
     val tipo: String,
     val contaId: Int,
     val contaNome: String,
-    val categoria: String,
+    val categoriaId: Int,
+    val categoriaNome: String,
     val data: String
 )
