@@ -99,6 +99,11 @@ fun AppFinanceiro() {
     val dao = banco.movimentacaoDao()
     val contaDao = banco.contaDao()
     val categoriaDao = banco.categoriaDao()
+    val cartaoDao = banco.cartaoDao()
+
+    val cartoes by cartaoDao
+        .listarTodos()
+        .collectAsState(initial = emptyList())
 
     val categorias by categoriaDao
         .listarTodas()
@@ -172,11 +177,17 @@ fun AppFinanceiro() {
 
         "inicio" -> {
             TelaInicial(
+                movimentacoes = movimentacoes,
+                contas = contas,
+
                 onNovaMovimentacao = {
                     telaAtual = "nova_movimentacao"
                 },
                 onContas = {
                     telaAtual = "contas"
+                },
+                onCartoes = {
+                    telaAtual = "cartoes"
                 },
                 onCategorias = {
                     telaAtual = "categorias"
@@ -186,6 +197,79 @@ fun AppFinanceiro() {
                 }
             )
         }
+
+        "cartoes" -> {
+            TelaCartoes(
+                cartoes = cartoes,
+                contas = contas,
+
+                onAdicionar ={
+                    nome,
+                        limite,
+                        diaFechamento,
+                        diaVencimento,
+                        contaId,
+                        resultado ->
+                    scope.launch {
+                        val nomeLimpo = nome.trim()
+                        val existe =
+                            cartaoDao.existeNome(nomeLimpo) > 0
+                        if (existe) {
+                            resultado(false)
+                        } else {
+                            cartaoDao.inserir(
+                                CartaoEntity(
+                                    nome = nomeLimpo,
+                                    limite = limite,
+                                    diaFechamento = diaFechamento,
+                                    diaVencimento = diaVencimento,
+                                    contaId = contaId
+                                )
+                            )
+
+                            resultado(true)
+                        }
+                    }
+                },
+
+                onEditar = {
+                    cartao,
+                    novoNome,
+                    novoLimite,
+                    novoDiaFechamento,
+                    novoDiaVencimento,
+                    novaContaId,
+                    resultado ->
+                    scope.launch {
+                        val nomeLimpo =
+                            novoNome.trim()
+                        val existe =
+                            cartaoDao.existeOutroNome(
+                                nome = nomeLimpo,
+                                idAtual = cartao.id
+                            ) > 0
+                    if (existe) {
+                        resultado(false)
+                    } else {
+                        cartaoDao.editar(
+                            id = cartao.id,
+                            nome = nomeLimpo,
+                            limite = novoLimite,
+                            diaFechamento = novoDiaFechamento,
+                            diaVencimento = novoDiaVencimento,
+                            contaId = novaContaId
+                        )
+                        resultado(true)
+                    }
+                }
+            },
+
+                onVoltar = {
+                    telaAtual = "inicio"
+                }
+            )
+        }
+
 
         "categorias" -> {
 
@@ -329,7 +413,7 @@ fun AppFinanceiro() {
             TelaContas(
                 contas = todasContas,
 
-                onAdicionarConta = { nome, resultado ->
+                onAdicionarConta = { nome, saldoInicial, resultado ->
                     scope.launch {
                         val nomeLimpo =
                             nome.trim()
@@ -342,7 +426,8 @@ fun AppFinanceiro() {
                         } else {
                             contaDao.inserir(
                                 ContaEntity(
-                                    nome = nomeLimpo
+                                    nome = nomeLimpo,
+                                    saldoInicial = saldoInicial
                                 )
                             )
 
@@ -351,7 +436,7 @@ fun AppFinanceiro() {
                     }
                 },
 
-                onEditar = { conta, novoNome, resultado ->
+                onEditar = { conta, novoNome, novoSaldoInicial, resultado ->
                     scope.launch {
                         val nomeLimpo = novoNome.trim()
                         val existe =
@@ -362,9 +447,10 @@ fun AppFinanceiro() {
                         if (existe) {
                             resultado(false)
                         } else {
-                            contaDao.editarNome(
+                            contaDao.editar(
                                 id = conta.id,
-                                novoNome = nomeLimpo
+                                novoNome = nomeLimpo,
+                                novoSaldoInicial = novoSaldoInicial
                             )
 
                             resultado(true)
@@ -443,11 +529,111 @@ fun AppFinanceiro() {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TelaInicial(
+    movimentacoes: List<Movimentacao>,
+    contas: List<ContaEntity>,
     onNovaMovimentacao: () -> Unit,
     onContas: () -> Unit,
     onCategorias: () -> Unit,
-    onHistorico: () -> Unit
+    onHistorico: () -> Unit,
+    onCartoes: () -> Unit
 ) {
+    val calendario = java.util.Calendar.getInstance()
+
+    val mesAtual =
+        String.format(
+            "%02d",
+            calendario.get(java.util.Calendar.MONTH) + 1
+        )
+
+    val anoAtual =
+        calendario
+            .get(java.util.Calendar.YEAR)
+            .toString()
+
+    val nomesMeses = listOf(
+        "Janeiro",
+        "Fevereiro",
+        "Março",
+        "Abril",
+        "Maio",
+        "Junho",
+        "Julho",
+        "Agosto",
+        "Setembro",
+        "Outubro",
+        "Novembro",
+        "Dezembro"
+    )
+
+    val nomeMesAtual =
+        nomesMeses[
+                mesAtual.toInt() - 1
+        ]
+
+    val periodoAtual =
+        "$nomeMesAtual de $anoAtual"
+
+    val movimentacoesDoMes =
+        movimentacoes.filter { movimentacao ->
+            val partes =
+                movimentacao.data.split("/")
+
+            if (partes.size != 3) {
+                false
+            } else {
+                val mes = partes[1]
+                val ano = partes[2]
+
+                mes == mesAtual &&
+                        ano == anoAtual
+            }
+        }
+
+    val entradasDoMes =
+        movimentacoesDoMes
+            .filter {
+                it.tipo == "Entrada"
+            }
+            .sumOf {
+                it.valor
+            }
+
+    val saidasDoMes =
+        movimentacoesDoMes
+            .filter {
+                it.tipo == "Saída"
+            } .sumOf {
+                it.valor
+            }
+
+    val saldosPorConta: Map<ContaEntity, Double> =
+        contas.associateWith { conta: ContaEntity ->
+            val movimentacoesDaConta: List<Movimentacao> =
+                movimentacoes.filter { movimentacao ->
+                    movimentacao.contaId == conta.id
+                }
+
+            val entradas: Double =
+                movimentacoesDaConta
+                    .filter { movimentacao ->
+                        movimentacao.tipo == "Entrada"
+                    }
+                    .sumOf { movimentacao ->
+                        movimentacao.valor
+                    }
+            val saidas: Double =
+                movimentacoesDaConta
+                    .filter { movimentacao ->
+                        movimentacao.tipo == "Saída"
+                    }
+                    .sumOf { movimentacao ->
+                        movimentacao.valor
+                    }
+            conta.saldoInicial + entradas - saidas
+        }
+
+    val saldoAtual: Double =
+        saldosPorConta.values.sum()
 
     val drawerState = rememberDrawerState(
         initialValue = DrawerValue.Closed
@@ -514,6 +700,21 @@ fun TelaInicial(
                         }
 
                         onContas()
+                    }
+                )
+
+                NavigationDrawerItem(
+                    label = {
+                        Text("Cartões")
+                    },
+                    selected = false,
+                    onClick = {
+
+                        scope.launch {
+                            drawerState.close()
+                        }
+
+                        onCartoes()
                     }
                 )
 
@@ -595,7 +796,7 @@ fun TelaInicial(
                         )
 
                         Text(
-                            text = "R$ 3.450,00",
+                            text = formatarDinheiro(saldoAtual),
                             fontSize = 30.sp,
                             fontWeight = FontWeight.Bold
                         )
@@ -603,7 +804,17 @@ fun TelaInicial(
                 }
 
                 Spacer(
-                    modifier = Modifier.height(16.dp)
+                    modifier = Modifier.height(20.dp)
+                )
+
+                Text(
+                    text = periodoAtual,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold
+                )
+
+                Spacer(
+                    modifier = Modifier.height(12.dp)
                 )
 
                 Row(
@@ -617,7 +828,7 @@ fun TelaInicial(
                         Text("Entradas")
 
                         Text(
-                            text = "R$ 5.200,00",
+                            text = formatarDinheiro(entradasDoMes),
                             fontWeight = FontWeight.Bold
                         )
                     }
@@ -627,7 +838,7 @@ fun TelaInicial(
                         Text("Saídas")
 
                         Text(
-                            text = "R$ 1.750,00",
+                            text = formatarDinheiro(saidasDoMes),
                             fontWeight = FontWeight.Bold
                         )
                     }
@@ -647,10 +858,21 @@ fun TelaInicial(
                     modifier = Modifier.height(12.dp)
                 )
 
-                ContaItem(
-                    nome = "Banco do Brasil",
-                    saldo = "R$ 1.200,00"
-                )
+                if (contas.isEmpty()) {
+                    Text(
+                        text = "Nenhuma conta cadastrada."
+                    )
+                } else {
+                    contas.forEach { conta ->
+                        val saldo: Double =
+                            saldosPorConta[conta] ?: 0.0
+
+                        ContaItem(
+                            nome = conta.nome,
+                            saldo = formatarDinheiro(saldo)
+                        )
+                    }
+                }
 
                 Spacer(
                     modifier = Modifier.height(24.dp)
@@ -1113,11 +1335,14 @@ fun ContaItem(
 fun TelaContas(
     contas: List<ContaEntity>,
     onAdicionarConta: (
-        String, (Boolean) -> Unit
+        String,
+        Double,
+        (Boolean) -> Unit
     ) -> Unit,
     onEditar: (
         ContaEntity,
         String,
+        Double,
         (Boolean) -> Unit
     ) -> Unit,
     onDesativar: (ContaEntity) -> Unit,
@@ -1132,10 +1357,18 @@ fun TelaContas(
         mutableStateOf("")
     }
 
+    var saldoInicialNovaConta by remember {
+        mutableStateOf("")
+    }
+
     var contaParaEditar by remember {
         mutableStateOf<ContaEntity?>(null)
     }
     var novoNomeConta by remember {
+        mutableStateOf("")
+    }
+
+    var novoSaldoInicial by remember {
         mutableStateOf("")
     }
 
@@ -1197,24 +1430,50 @@ fun TelaContas(
                     modifier = Modifier.height(12.dp)
                 )
 
+                OutlinedTextField(
+                    value = saldoInicialNovaConta,
+                    onValueChange = {
+                        saldoInicialNovaConta = it
+                        mensagem = ""
+                    },
+                    label = {
+                        Text("Saldo inicial")
+                    },
+                    placeholder = {
+                        Text("Ex.: 1500,00")
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                Spacer(
+                    modifier = Modifier.height(12.dp)
+                )
+
                 Button(
                     onClick = {
+                        val saldoConvertido =
+                            saldoInicialNovaConta
+                                .replace(",", "")
+                                .replace(",", ".")
+                                .toDoubleOrNull()
 
-                        if (nomeNovaConta.isNotBlank()) {
-
+                        if (nomeNovaConta.isBlank()) {
+                            mensagem =
+                                "Digite o nome da conta."
+                        } else if (saldoConvertido == null) {
+                            mensagem =
+                                "Digite um saldo inicial válido."
+                        } else {
                             onAdicionarConta(
-                                nomeNovaConta
-                            ) { sucesso ->
-
+                                nomeNovaConta,
+                                saldoConvertido
+                            ){ sucesso ->
                                 if (sucesso) {
-
                                     mensagem =
                                         "Conta adicionada."
-
                                     nomeNovaConta = ""
-
+                                    saldoInicialNovaConta = ""
                                 } else {
-
                                     mensagem =
                                         "Já existe uma conta com esse nome."
                                 }
@@ -1283,6 +1542,11 @@ fun TelaContas(
 
                             Text(
                                 text =
+                                "Saldo inicial: ${formatarDinheiro(conta.saldoInicial)}"
+                            )
+
+                            Text(
+                                text =
                                     if (conta.ativa) {
                                         "Ativa"
                                     } else {
@@ -1299,6 +1563,10 @@ fun TelaContas(
                             onClick = {
                                 contaParaEditar = conta
                                 novoNomeConta = conta.nome
+                                novoSaldoInicial =
+                                    conta.saldoInicial
+                                        .toString()
+                                        .replace(".", ",")
                                 mensagemEdicao = ""
                             },
                             modifier = Modifier.fillMaxWidth()
@@ -1478,6 +1746,22 @@ fun TelaContas(
                         modifier = Modifier.fillMaxWidth()
                     )
 
+                    Spacer(
+                        modifier = Modifier.height(12.dp)
+                    )
+
+                    OutlinedTextField(
+                        value = novoSaldoInicial,
+                        onValueChange = {
+                            novoSaldoInicial = it
+                            mensagemEdicao = ""
+                        },
+                        label = {
+                            Text("Saldo inicial")
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
                     if (mensagemEdicao.isNotBlank()) {
 
                         Spacer(
@@ -1495,17 +1779,24 @@ fun TelaContas(
 
                 TextButton(
                     onClick = {
-
+                        val saldoConvertido =
+                            novoSaldoInicial
+                                .replace(".", "")
+                                .replace(",",".")
+                                .toDoubleOrNull()
                         if (novoNomeConta.isBlank()) {
 
                             mensagemEdicao =
                                 "O nome da conta não pode ficar vazio."
-
+                        } else if (saldoConvertido == null) {
+                            mensagemEdicao =
+                                "Digite um saldo inicial válido."
                         } else {
 
                             onEditar(
                                 conta,
-                                novoNomeConta
+                                novoNomeConta,
+                                saldoConvertido
                             ) { sucesso ->
 
                                 if (sucesso) {
@@ -1539,8 +1830,452 @@ fun TelaContas(
             }
         )
     }
+}
 
+@Composable
+fun TelaCartoes(
+    cartoes: List<CartaoComConta>,
+    contas: List<ContaEntity>,
+    onAdicionar: (
+            String,
+            Double,
+            Int,
+            Int,
+            Int,
+            (Boolean) -> Unit
+    ) -> Unit,
+
+    onEditar: (
+            CartaoComConta,
+            String,
+            Double,
+            Int,
+            Int,
+            Int,
+            (Boolean) -> Unit
+            ) -> Unit,
+    onVoltar: () -> Unit
+) {
+
+    var nomeCartao by remember {
+        mutableStateOf("")
     }
+
+    var limiteCartao by remember {
+        mutableStateOf("")
+    }
+
+    var fechamentoCartao by remember {
+        mutableStateOf("")
+    }
+
+    var vencimentoCartao by remember {
+        mutableStateOf("")
+    }
+    var contaSelecionada by remember {
+        mutableStateOf<ContaEntity?>(null)
+    }
+    var menuContaAberto by remember {
+        mutableStateOf(false)
+    }
+    var mensagem by remember {
+        mutableStateOf("")
+    }
+
+    var cartaoParaEditar by remember {
+        mutableStateOf<CartaoComConta?>(null)
+    }
+
+    var novoNomeCartao by remember {
+        mutableStateOf("")
+    }
+    var novoLimiteCartao by remember {
+        mutableStateOf("")
+    }
+    var novoFechamentoCartao by remember {
+        mutableStateOf("")
+    }
+    var novoVencimentoCartao by remember {
+        mutableStateOf("")
+    }
+    var novaContaCartao by remember {
+        mutableStateOf<ContaEntity?>(null)
+    }
+    var menuNovaContaAberto by remember {
+        mutableStateOf(false)
+    }
+    var mensagemEdicao by remember {
+        mutableStateOf("")
+    }
+
+
+    LaunchedEffect(contas) {
+        if (
+            contas.isNotEmpty() &&
+            contaSelecionada == null
+        ) {
+            contaSelecionada = contas.first()
+        }
+    }
+    Scaffold(
+        modifier = Modifier.fillMaxSize(),
+        containerColor = MaterialTheme.colorScheme.background
+    ) { innerPadding ->
+
+        LazyColumn(
+            modifier = Modifier
+                .padding(innerPadding)
+                .padding(20.dp)
+                .fillMaxSize()
+        ) {
+
+            item {
+
+                Text(
+                    text = "Gerenciar cartões",
+                    fontSize = 28.sp,
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(
+                    modifier = Modifier.height(20.dp)
+                )
+
+                OutlinedTextField(
+                    value = nomeCartao,
+                    onValueChange = {
+                        nomeCartao = it
+                        mensagem = ""
+                    },
+                    label = {
+                        Text("Nome do cartão")
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                Spacer(
+                    modifier = Modifier.height(12.dp)
+                )
+
+                OutlinedTextField(
+                    value = limiteCartao,
+                    onValueChange = {
+                        limiteCartao = it
+                        mensagem = ""
+                    },
+                    label = {
+                        Text("Limite")
+                    },
+                    placeholder = {
+                        Text("Ex.: 5000,00")
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                Spacer(
+                    modifier = Modifier.height(12.dp)
+                )
+
+                OutlinedTextField(
+                    value = fechamentoCartao,
+                    onValueChange = {
+                        fechamentoCartao = it
+                        mensagem = ""
+                    },
+                    label = {
+                        Text("Dia de fechamento")
+                    },
+                    placeholder = {
+                        Text("Ex.: 10")
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                Spacer(
+                    modifier = Modifier.height(12.dp)
+                )
+
+                OutlinedTextField(
+                    value = vencimentoCartao,
+                    onValueChange = {
+                        vencimentoCartao = it
+                        mensagem = ""
+                    },
+                    label = {
+                        Text("Dia de vencimento")
+                    },
+                    placeholder = {
+                        Text("Ex.: 17")
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                Spacer(
+                    modifier = Modifier.height(12.dp)
+                )
+                Box(
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+
+                    Button(
+                        onClick = {
+                            menuContaAberto = true
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+
+                        Text(
+                            text =
+                                "Conta: ${contaSelecionada?.nome ?: "Selecione"}"
+                        )
+                    }
+
+                    DropdownMenu(
+                        expanded = menuContaAberto,
+                        onDismissRequest = {
+                            menuContaAberto = false
+                        }
+                    ) {
+
+                        contas.forEach { conta ->
+
+                            DropdownMenuItem(
+                                text = {
+                                    Text(conta.nome)
+                                },
+                                onClick = {
+                                    contaSelecionada = conta
+                                    menuContaAberto = false
+                                }
+                            )
+                        }
+                    }
+                }
+
+                Spacer(
+                    modifier = Modifier.height(16.dp)
+                )
+
+                Button(
+                    onClick = {
+
+                        val limiteConvertido =
+                            limiteCartao
+                                .replace(".", "")
+                                .replace(",", ".")
+                                .toDoubleOrNull()
+
+                        val fechamentoConvertido =
+                            fechamentoCartao.toIntOrNull()
+
+                        val vencimentoConvertido =
+                            vencimentoCartao.toIntOrNull()
+
+                        val contaEscolhida =
+                            contaSelecionada
+
+                        if (nomeCartao.isBlank()) {
+
+                            mensagem =
+                                "Digite o nome do cartão."
+
+                        } else if (limiteConvertido == null) {
+
+                            mensagem =
+                                "Digite um limite válido."
+
+                        } else if (
+                            fechamentoConvertido == null ||
+                            fechamentoConvertido !in 1..31
+                        ) {
+
+                            mensagem =
+                                "O dia de fechamento deve estar entre 1 e 31."
+
+                        } else if (
+                            vencimentoConvertido == null ||
+                            vencimentoConvertido !in 1..31
+                        ) {
+
+                            mensagem =
+                                "O dia de vencimento deve estar entre 1 e 31."
+
+                        } else if (contaEscolhida == null) {
+
+                            mensagem =
+                                "Selecione uma conta."
+
+                        } else {
+
+                            onAdicionar(
+                                nomeCartao,
+                                limiteConvertido,
+                                fechamentoConvertido,
+                                vencimentoConvertido,
+                                contaEscolhida.id
+                            ) { sucesso ->
+
+                                if (sucesso) {
+
+                                    mensagem =
+                                        "Cartão cadastrado com sucesso."
+
+                                    nomeCartao = ""
+                                    limiteCartao = ""
+                                    fechamentoCartao = ""
+                                    vencimentoCartao = ""
+
+                                } else {
+
+                                    mensagem =
+                                        "Já existe um cartão com esse nome."
+                                }
+                            }
+                        }
+                    },
+
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+
+                    Text("Adicionar cartão")
+                }
+                if (mensagem.isNotBlank()) {
+
+                    Spacer(
+                        modifier = Modifier.height(8.dp)
+                    )
+
+                    Text(
+                        text = mensagem
+                    )
+                }
+                Spacer(
+                    modifier = Modifier.height(28.dp)
+                )
+
+                Text(
+                    text = "Cartões cadastrados",
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Bold
+                )
+
+                Spacer(
+                    modifier = Modifier.height(12.dp)
+                )
+
+
+
+                Spacer(
+                    modifier = Modifier.height(20.dp)
+                )
+            }
+
+            if (cartoes.isEmpty()) {
+
+                item {
+
+                    Text(
+                        text = "Nenhum cartão cadastrado."
+                    )
+
+                    Spacer(
+                        modifier = Modifier.height(20.dp)
+                    )
+                }
+
+            } else {
+
+                items(
+                    items = cartoes,
+                    key = { cartao ->
+                        cartao.id
+                    }
+                ) { cartao ->
+
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 6.dp)
+                    ) {
+
+                        Column(
+                            modifier = Modifier.padding(16.dp)
+                        ) {
+
+                            Text(
+                                text = cartao.nome,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 18.sp
+                            )
+
+                            Spacer(
+                                modifier = Modifier.height(8.dp)
+                            )
+
+                            Text(
+                                text = "Limite: ${formatarDinheiro(cartao.limite)}"
+                            )
+
+                            Text(
+                                text = "Conta: ${cartao.contaNome}"
+                            )
+
+                            Text(
+                                text = "Fecha dia ${cartao.diaFechamento}"
+                            )
+
+                            Text(
+                                text = "Vence dia ${cartao.diaVencimento}"
+                            )
+                        }
+                    }
+                    Spacer(
+                        modifier = Modifier.height(12.dp)
+                    )
+                    Button(
+                        onClick = {
+                            cartaoParaEditar = cartao
+                            novoNomeCartao = cartao.nome
+                            novoLimiteCartao =
+                                cartao.limite
+                                    .toString()
+                                    .replace(".",",")
+                            novoFechamentoCartao =
+                                cartao.diaFechamento.toString()
+                            novoVencimentoCartao =
+                                cartao.diaVencimento.toString()
+                            novaContaCartao =
+                                contas.find {
+                                    it.id == cartao.contaId
+                                }
+                            mensagemEdicao = ""
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Editar")
+                    }
+                }
+            }
+
+            item {
+
+                Spacer(
+                    modifier = Modifier.height(20.dp)
+                )
+
+                Button(
+                    onClick = onVoltar,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Voltar")
+                }
+
+                Spacer(
+                    modifier = Modifier.height(24.dp)
+                )
+            }
+        }
+    }
+}
 @Composable
 fun TelaCategorias(
     categorias: List<CategoriaEntity>,
@@ -2712,4 +3447,15 @@ fun TelaHistorico(
             )
         }
     }
+}
+fun formatarDinheiro(valor: Double): String {
+    val formato =
+        java.text.NumberFormat
+            .getCurrencyInstance(
+                java.util.Locale(
+                    "pt",
+                    "BR"
+                )
+            )
+    return formato.format(valor)
 }

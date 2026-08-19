@@ -99,13 +99,15 @@ interface ContaDao {
     @Query(
         """
         UPDATE contas
-        SET nome = :novoNome
+        SET nome = :novoNome,
+            saldoInicial = :novoSaldoInicial
         WHERE id = :id
         """
     )
-    suspend fun editarNome(
+    suspend fun editar(
         id: Int,
-        novoNome: String
+        novoNome: String,
+        novoSaldoInicial: Double
     )
 
     @Query(
