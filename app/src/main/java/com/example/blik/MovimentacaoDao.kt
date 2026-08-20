@@ -10,7 +10,7 @@ interface MovimentacaoDao {
     @Insert
     suspend fun inserir(
         movimentacao: MovimentacaoEntity
-    )
+    ): Long
 
     @Query(
         """
@@ -19,21 +19,39 @@ interface MovimentacaoDao {
         movimentacoes.descricao AS descricao,
         movimentacoes.valor AS valor,
         movimentacoes.tipo AS tipo,
+        movimentacoes.formaPagamento AS formaPagamento,
+
         movimentacoes.contaId AS contaId,
-        contas.nome AS contaNome,
+        contaOrigem.nome AS contaNome,
+
+        movimentacoes.contaDestinoId AS contaDestinoId,
+        contaDestino.nome AS contaDestinoNome,
+
         movimentacoes.categoriaId AS categoriaId,
         categorias.nome AS categoriaNome,
+
+        movimentacoes.cartaoId AS cartaoId,
+        cartoes.nome AS cartaoNome,
+
+        movimentacoes.quantidadeParcelas AS quantidadeParcelas,
+
         movimentacoes.data AS data
 
     FROM movimentacoes
 
-    INNER JOIN contas
-        ON movimentacoes.contaId = contas.id
-        
-    INNER JOIN categorias
+    LEFT JOIN contas AS contaOrigem
+        ON movimentacoes.contaId = contaOrigem.id
+
+    LEFT JOIN contas AS contaDestino
+        ON movimentacoes.contaDestinoId = contaDestino.id
+
+    LEFT JOIN categorias
         ON movimentacoes.categoriaId = categorias.id
 
-    ORDER BY 
+    LEFT JOIN cartoes
+        ON movimentacoes.cartaoId = cartoes.id
+
+    ORDER BY
         substr(movimentacoes.data, 7, 4) DESC,
         substr(movimentacoes.data, 4, 2) DESC,
         substr(movimentacoes.data, 1, 2) DESC,
@@ -81,8 +99,12 @@ interface MovimentacaoDao {
         descricao = :descricao,
         valor = :valor,
         tipo = :tipo,
+        formaPagamento = :formaPagamento,
         contaId = :contaId,
+        contaDestinoId = :contaDestinoId,
         categoriaId = :categoriaId,
+        cartaoId = :cartaoId,
+        quantidadeParcelas = :quantidadeParcelas,
         data = :data
     WHERE id = :id
     """
@@ -92,8 +114,12 @@ interface MovimentacaoDao {
         descricao: String,
         valor: Double,
         tipo: String,
-        contaId: Int,
-        categoriaId: Int,
+        formaPagamento: String?,
+        contaId: Int?,
+        contaDestinoId: Int?,
+        categoriaId: Int?,
+        cartaoId: Int?,
+        quantidadeParcelas: Int,
         data: String
     )
 }

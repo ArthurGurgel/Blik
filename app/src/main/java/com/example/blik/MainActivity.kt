@@ -57,14 +57,35 @@ import com.example.blik.ui.theme.BlikTheme
 import kotlinx.coroutines.launch
 
 data class Movimentacao(
+
     val id: Int = 0,
+
     val descricao: String,
+
     val valor: Double,
+
     val tipo: String,
-    val contaId: Int,
-    val contaNome: String,
-    val categoriaId: Int,
-    val categoriaNome: String,
+
+    val formaPagamento: String? = null,
+
+    val contaId: Int? = null,
+
+    val contaNome: String? = null,
+
+    val contaDestinoId: Int? = null,
+
+    val contaDestinoNome: String? = null,
+
+    val categoriaId: Int? = null,
+
+    val categoriaNome: String? = null,
+
+    val cartaoId: Int? = null,
+
+    val cartaoNome: String? = null,
+
+    val quantidadeParcelas: Int = 1,
+
     val data: String
 )
 
@@ -100,6 +121,9 @@ fun AppFinanceiro() {
     val contaDao = banco.contaDao()
     val categoriaDao = banco.categoriaDao()
     val cartaoDao = banco.cartaoDao()
+
+    val parcelaCartaoDao =
+        banco.parcelaCartaoDao()
 
     val cartoes by cartaoDao
         .listarTodos()
@@ -158,20 +182,34 @@ fun AppFinanceiro() {
         mutableStateOf<Movimentacao?>(null)
     }
 
-    val movimentacoes = movimentacoesEntity.map { item ->
+    val movimentacoes =
+        movimentacoesEntity.map { item ->
 
-        Movimentacao(
-            id = item.id,
-            descricao = item.descricao,
-            valor = item.valor,
-            tipo = item.tipo,
-            contaId = item.contaId,
-            contaNome = item.contaNome,
-            categoriaId = item.categoriaId,
-            categoriaNome = item.categoriaNome,
-            data = item.data
-        )
-    }
+            Movimentacao(
+                id = item.id,
+                descricao = item.descricao,
+                valor = item.valor,
+                tipo = item.tipo,
+                formaPagamento = item.formaPagamento,
+
+                contaId = item.contaId,
+                contaNome = item.contaNome,
+
+                contaDestinoId = item.contaDestinoId,
+                contaDestinoNome = item.contaDestinoNome,
+
+                categoriaId = item.categoriaId,
+                categoriaNome = item.categoriaNome,
+
+                cartaoId = item.cartaoId,
+                cartaoNome = item.cartaoNome,
+
+                quantidadeParcelas =
+                    item.quantidadeParcelas,
+
+                data = item.data
+            )
+        }
 
     when (telaAtual) {
 
@@ -263,6 +301,13 @@ fun AppFinanceiro() {
                     }
                 }
             },
+                onExcluir = { cartao ->
+                    scope.launch {
+                        cartaoDao.excluir(
+                            cartao.id
+                        )
+                    }
+                },
 
                 onVoltar = {
                     telaAtual = "inicio"
@@ -352,20 +397,90 @@ fun AppFinanceiro() {
             TelaNovaMovimentacao(
                 contas = contas,
                 categorias = categorias,
+                cartoes = cartoes,
 
                 onSalvar = { novaMovimentacao ->
 
                     scope.launch {
-                        dao.inserir(
-                            MovimentacaoEntity(
-                                descricao = novaMovimentacao.descricao,
-                                valor = novaMovimentacao.valor,
-                                tipo = novaMovimentacao.tipo,
-                                contaId = novaMovimentacao.contaId,
-                                categoriaId = novaMovimentacao.categoriaId,
-                                data = novaMovimentacao.data
+
+                        val idMovimentacao =
+                            dao.inserir(
+                                MovimentacaoEntity(
+                                    descricao =
+                                        novaMovimentacao.descricao,
+
+                                    valor =
+                                        novaMovimentacao.valor,
+
+                                    tipo =
+                                        novaMovimentacao.tipo,
+
+                                    formaPagamento =
+                                        novaMovimentacao.formaPagamento,
+
+                                    contaId =
+                                        novaMovimentacao.contaId,
+
+                                    contaDestinoId =
+                                        novaMovimentacao.contaDestinoId,
+
+                                    categoriaId =
+                                        novaMovimentacao.categoriaId,
+
+                                    cartaoId =
+                                        novaMovimentacao.cartaoId,
+
+                                    quantidadeParcelas =
+                                        novaMovimentacao.quantidadeParcelas,
+
+                                    data =
+                                        novaMovimentacao.data
+                                )
                             )
-                        )
+                        if (
+                            novaMovimentacao.tipo == "Saída" &&
+                            novaMovimentacao.formaPagamento == "Crédito"
+                        ) {
+
+                            val cartaoId =
+                                novaMovimentacao.cartaoId
+
+                            val cartao =
+                                cartoes.find {
+                                    it.id == cartaoId
+                                }
+
+                            if (
+                                cartaoId != null &&
+                                cartao != null
+                            ) {
+
+                                val parcelas =
+                                    gerarParcelasCartao(
+                                        movimentacaoId =
+                                            idMovimentacao.toInt(),
+
+                                        cartaoId =
+                                            cartaoId,
+
+                                        valorTotal =
+                                            novaMovimentacao.valor,
+
+                                        quantidadeParcelas =
+                                            novaMovimentacao.quantidadeParcelas,
+
+                                        dataCompra =
+                                            novaMovimentacao.data,
+
+                                        diaFechamento =
+                                            cartao.diaFechamento
+                                    )
+
+                                parcelaCartaoDao
+                                    .inserirTodas(parcelas)
+                            }
+                        }
+
                         telaAtual = "inicio"
                     }
                 },
@@ -381,6 +496,7 @@ fun AppFinanceiro() {
             TelaNovaMovimentacao(
                 contas = contas,
                 categorias = categorias,
+                cartoes = cartoes,
                 movimentacaoParaEditar = movimentacaoEmEdicao,
 
                 onSalvar = { movimentacao ->
@@ -392,9 +508,27 @@ fun AppFinanceiro() {
                             descricao = movimentacao.descricao,
                             valor = movimentacao.valor,
                             tipo = movimentacao.tipo,
-                            contaId = movimentacao.contaId,
-                            categoriaId = movimentacao.categoriaId,
-                            data = movimentacao.data
+
+                            formaPagamento =
+                                movimentacao.formaPagamento,
+
+                            contaId =
+                                movimentacao.contaId,
+
+                            contaDestinoId =
+                                movimentacao.contaDestinoId,
+
+                            categoriaId =
+                                movimentacao.categoriaId,
+
+                            cartaoId =
+                                movimentacao.cartaoId,
+
+                            quantidadeParcelas =
+                                movimentacao.quantidadeParcelas,
+
+                            data =
+                                movimentacao.data
                         )
 
                         movimentacaoEmEdicao = null
@@ -591,45 +725,70 @@ fun TelaInicial(
 
     val entradasDoMes =
         movimentacoesDoMes
-            .filter {
-                it.tipo == "Entrada"
+            .filter { movimentacao ->
+                movimentacao.tipo == "Entrada"
             }
-            .sumOf {
-                it.valor
+            .sumOf { movimentacao ->
+                movimentacao.valor
             }
 
     val saidasDoMes =
         movimentacoesDoMes
-            .filter {
-                it.tipo == "Saída"
-            } .sumOf {
-                it.valor
+            .filter { movimentacao ->
+                movimentacao.tipo == "Saída"
+            } .sumOf { movimentacao ->
+                movimentacao.valor
             }
 
     val saldosPorConta: Map<ContaEntity, Double> =
         contas.associateWith { conta: ContaEntity ->
-            val movimentacoesDaConta: List<Movimentacao> =
-                movimentacoes.filter { movimentacao ->
-                    movimentacao.contaId == conta.id
-                }
 
             val entradas: Double =
-                movimentacoesDaConta
+                movimentacoes
                     .filter { movimentacao ->
-                        movimentacao.tipo == "Entrada"
+                        movimentacao.tipo == "Entrada" &&
+                                movimentacao.contaId == conta.id
                     }
                     .sumOf { movimentacao ->
                         movimentacao.valor
                     }
-            val saidas: Double =
-                movimentacoesDaConta
+
+            val saidasDaConta: Double =
+                movimentacoes
                     .filter { movimentacao ->
-                        movimentacao.tipo == "Saída"
+                        movimentacao.tipo == "Saída" &&
+                                movimentacao.formaPagamento == "Conta" &&
+                                movimentacao.contaId == conta.id
                     }
                     .sumOf { movimentacao ->
                         movimentacao.valor
                     }
-            conta.saldoInicial + entradas - saidas
+
+            val transferenciasSaindo: Double =
+                movimentacoes
+                    .filter { movimentacao ->
+                        movimentacao.tipo == "Transferência" &&
+                                movimentacao.contaId == conta.id
+                    }
+                    .sumOf { movimentacao ->
+                        movimentacao.valor
+                    }
+
+            val transferenciasEntrando: Double =
+                movimentacoes
+                    .filter { movimentacao ->
+                        movimentacao.tipo == "Transferência" &&
+                                movimentacao.contaDestinoId == conta.id
+                    }
+                    .sumOf { movimentacao ->
+                        movimentacao.valor
+                    }
+
+            conta.saldoInicial +
+                    entradas -
+                    saidasDaConta -
+                    transferenciasSaindo +
+                    transferenciasEntrando
         }
 
     val saldoAtual: Double =
@@ -888,21 +1047,16 @@ fun TelaInicial(
         }
     }
 }
-
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TelaNovaMovimentacao(
     contas: List<ContaEntity>,
     categorias: List<CategoriaEntity>,
+    cartoes: List<CartaoComConta>,
     movimentacaoParaEditar: Movimentacao? = null,
     onSalvar: (Movimentacao) -> Unit,
     onVoltar: () -> Unit
 ) {
-
-    var tipo by remember {
-        mutableStateOf(
-            movimentacaoParaEditar?.tipo ?: "Saída"
-        )
-    }
 
     var descricao by remember {
         mutableStateOf(
@@ -920,12 +1074,41 @@ fun TelaNovaMovimentacao(
         )
     }
 
+    var tipo by remember {
+        mutableStateOf(
+            movimentacaoParaEditar?.tipo ?: ""
+        )
+    }
+
+    var formaPagamento by remember {
+        mutableStateOf(
+            movimentacaoParaEditar?.formaPagamento ?: ""
+        )
+    }
+
     var contaSelecionada by remember {
+        mutableStateOf<ContaEntity?>(null)
+    }
+
+    var contaDestinoSelecionada by remember {
         mutableStateOf<ContaEntity?>(null)
     }
 
     var categoriaSelecionada by remember {
         mutableStateOf<CategoriaEntity?>(null)
+    }
+
+    var cartaoSelecionado by remember {
+        mutableStateOf<CartaoComConta?>(null)
+    }
+
+    var quantidadeParcelas by remember {
+        mutableStateOf(
+            movimentacaoParaEditar
+                ?.quantidadeParcelas
+                ?.toString()
+                ?: "1"
+        )
     }
 
     var data by remember {
@@ -938,309 +1121,1186 @@ fun TelaNovaMovimentacao(
         )
     }
 
-    LaunchedEffect(contas, movimentacaoParaEditar) {
-
-        if (contas.isNotEmpty()) {
-
-            contaSelecionada =
-                if (movimentacaoParaEditar != null) {
-
-                    contas.find {
-                        it.id == movimentacaoParaEditar.contaId
-                    } ?: contas.first()
-
-                } else {
-
-                    contas.first()
-                }
-        }
+    var mensagem by remember {
+        mutableStateOf("")
     }
 
-    LaunchedEffect(categorias, movimentacaoParaEditar) {
+    // POPUPS
 
-        if (categorias.isNotEmpty()) {
-
-            categoriaSelecionada =
-                if (movimentacaoParaEditar != null) {
-
-                    categorias.find {
-                        it.id == movimentacaoParaEditar.categoriaId
-                    } ?: categorias.first()
-
-                } else {
-
-                    categorias.first()
-                }
-        }
+    var mostrarSelecaoTipo by remember {
+        mutableStateOf(false)
     }
 
+    var mostrarSelecaoFormaPagamento by remember {
+        mutableStateOf(false)
+    }
+
+    var mostrarSelecaoConta by remember {
+        mutableStateOf(false)
+    }
+
+    var mostrarSelecaoContaDestino by remember {
+        mutableStateOf(false)
+    }
+
+    var mostrarSelecaoCategoria by remember {
+        mutableStateOf(false)
+    }
+
+    var mostrarSelecaoCartao by remember {
+        mutableStateOf(false)
+    }
+
+    var mostrarSelecaoParcelas by remember {
+        mutableStateOf(false)
+    }
 
     var mostrarCalendario by remember {
         mutableStateOf(false)
     }
 
-    var menuContaAberto by remember {
-        mutableStateOf(false)
+
+    // CARREGA DADOS QUANDO FOR EDIÇÃO
+
+    LaunchedEffect(
+        contas,
+        categorias,
+        cartoes,
+        movimentacaoParaEditar
+    ) {
+
+        movimentacaoParaEditar?.let { movimentacao ->
+
+            contaSelecionada =
+                contas.find {
+                    it.id == movimentacao.contaId
+                }
+
+            contaDestinoSelecionada =
+                contas.find {
+                    it.id == movimentacao.contaDestinoId
+                }
+
+            categoriaSelecionada =
+                categorias.find {
+                    it.id == movimentacao.categoriaId
+                }
+
+            cartaoSelecionado =
+                cartoes.find {
+                    it.id == movimentacao.cartaoId
+                }
+        }
     }
 
-    var menuCategoriaAberto by remember {
-        mutableStateOf(false)
-    }
 
     Scaffold(
         modifier = Modifier.fillMaxSize(),
-        containerColor = MaterialTheme.colorScheme.background
+        containerColor =
+            MaterialTheme.colorScheme.background
     ) { innerPadding ->
 
-        Column(
+        LazyColumn(
             modifier = Modifier
                 .padding(innerPadding)
                 .padding(20.dp)
                 .fillMaxSize()
         ) {
 
-            Text(
-                text =
-                    if (movimentacaoParaEditar == null) {
-                        "Nova Movimentação"
-                    } else {
-                        "Editar Movimentação"
+            item {
+
+                Text(
+                    text =
+                        if (movimentacaoParaEditar == null) {
+                            "Nova movimentação"
+                        } else {
+                            "Editar movimentação"
+                        },
+                    fontSize = 28.sp,
+                    fontWeight = FontWeight.Bold
+                )
+
+                Spacer(
+                    modifier = Modifier.height(24.dp)
+                )
+
+
+                // DESCRIÇÃO
+
+                OutlinedTextField(
+                    value = descricao,
+                    onValueChange = {
+                        descricao = it
+                        mensagem = ""
                     },
-                fontSize = 28.sp,
-                fontWeight = FontWeight.Bold
-            )
+                    label = {
+                        Text("Descrição")
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                )
 
-            Spacer(
-                modifier = Modifier.height(20.dp)
-            )
+                Spacer(
+                    modifier = Modifier.height(12.dp)
+                )
 
-            Text(
-                text = "Tipo",
-                fontWeight = FontWeight.Bold
-            )
 
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
+                // VALOR
+
+                OutlinedTextField(
+                    value = valor,
+                    onValueChange = {
+                        valor = it
+                        mensagem = ""
+                    },
+                    label = {
+                        Text("Valor")
+                    },
+                    placeholder = {
+                        Text("Ex.: 150,00")
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                Spacer(
+                    modifier = Modifier.height(12.dp)
+                )
+
+
+                // TIPO
 
                 Button(
                     onClick = {
-                        tipo = "Entrada"
-                    },
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Text("Entrada")
-                }
-
-                Button(
-                    onClick = {
-                        tipo = "Saída"
-                    },
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Text("Saída")
-                }
-            }
-
-            Spacer(
-                modifier = Modifier.height(16.dp)
-            )
-
-            OutlinedTextField(
-                value = descricao,
-                onValueChange = {
-                    descricao = it
-                },
-                label = {
-                    Text("Descrição")
-                },
-                modifier = Modifier.fillMaxWidth()
-            )
-
-            Spacer(
-                modifier = Modifier.height(12.dp)
-            )
-
-            OutlinedTextField(
-                value = valor,
-                onValueChange = {
-                    valor = it
-                },
-                label = {
-                    Text("Valor")
-                },
-                placeholder = {
-                    Text("Ex.: 150,00")
-                },
-                modifier = Modifier.fillMaxWidth()
-            )
-
-            Spacer(
-                modifier = Modifier.height(12.dp)
-            )
-
-            Button(
-                onClick = {
-                    mostrarCalendario = true
-                },
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text("Data: $data")
-            }
-
-            Spacer(
-                modifier = Modifier.height(12.dp)
-            )
-
-            Box(
-                modifier = Modifier.fillMaxWidth()
-            ) {
-
-                Button(
-                    onClick = {
-                        menuContaAberto = true
+                        mostrarSelecaoTipo = true
                     },
                     modifier = Modifier.fillMaxWidth()
                 ) {
+
                     Text(
                         text =
-                            "Conta: ${contaSelecionada?.nome ?: "Selecione"}"
+                            if (tipo.isBlank()) {
+                                "Tipo: Selecione"
+                            } else {
+                                "Tipo: $tipo"
+                            }
                     )
                 }
 
-                DropdownMenu(
-                    expanded = menuContaAberto,
-                    onDismissRequest = {
-                        menuContaAberto = false
-                    }
-                ) {
 
-                    contas.forEach { contaBanco ->
+                // -------------------------
+                // ENTRADA
+                // -------------------------
 
-                        DropdownMenuItem(
-                            text = {
-                                Text(contaBanco.nome)
-                            },
-                            onClick = {
-                                contaSelecionada = contaBanco
-                                menuContaAberto = false
-                            }
-                        )
-                    }
-                }
-            }
+                if (tipo == "Entrada") {
 
-            Spacer(
-                modifier = Modifier.height(12.dp)
-            )
-
-            Box(
-                modifier = Modifier.fillMaxWidth()
-            ) {
-
-                Button(
-                    onClick = {
-                        menuCategoriaAberto = true
-                    },
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text("Categoria: ${categoriaSelecionada?.nome ?: "Selecione"}"
+                    Spacer(
+                        modifier = Modifier.height(12.dp)
                     )
-                }
 
-                DropdownMenu(
-                    expanded = menuCategoriaAberto,
-                    onDismissRequest = {
-                        menuCategoriaAberto = false
-                    }
-                ) {
-
-
-                    categorias.forEach { categoriaBanco ->
-
-                        DropdownMenuItem(
-                            text = {
-                                Text(categoriaBanco.nome)
-                            },
-                            onClick = {
-                                categoriaSelecionada = categoriaBanco
-                                menuCategoriaAberto = false
-                            }
-                        )
-                    }
-                }
-            }
-
-            Spacer(
-                modifier = Modifier.height(24.dp)
-            )
-
-            Text(
-                text = "Tipo selecionado: $tipo"
-            )
-
-            Text(
-                text = "Conta: ${contaSelecionada?.nome ?: "Nenhuma"}"
-            )
-
-            Text(
-                text = "Categoria: ${categoriaSelecionada?.nome ?: "Nenhuma"}"
-            )
-
-            Spacer(
-                modifier = Modifier.height(20.dp)
-            )
-
-            Button(
-                onClick = {
-
-                    val valorConvertido =
-                        valor
-                            .replace(",", ".")
-                            .toDoubleOrNull()
-
-                    val contaEscolhida = contaSelecionada
-                    val categoriaEscolhida = categoriaSelecionada
-
-                    if (
-                        descricao.isNotBlank() &&
-                        valorConvertido != null &&
-                        contaEscolhida != null &&
-                        categoriaEscolhida != null
+                    Button(
+                        onClick = {
+                            mostrarSelecaoConta = true
+                        },
+                        modifier = Modifier.fillMaxWidth()
                     ) {
 
-                        val movimentacao = Movimentacao(
-                            id = movimentacaoParaEditar?.id ?: 0,
-                            descricao = descricao,
-                            valor = valorConvertido,
-                            tipo = tipo,
-                            contaId = contaEscolhida.id,
-                            contaNome = contaEscolhida.nome,
-                            categoriaId = categoriaEscolhida.id,
-                            categoriaNome = categoriaEscolhida.nome,
-                            data = data
+                        Text(
+                            text =
+                                "Conta: ${
+                                    contaSelecionada?.nome
+                                        ?: "Selecione"
+                                }"
+                        )
+                    }
+
+                    Spacer(
+                        modifier = Modifier.height(12.dp)
+                    )
+
+                    Button(
+                        onClick = {
+                            mostrarSelecaoCategoria = true
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+
+                        Text(
+                            text =
+                                "Categoria: ${
+                                    categoriaSelecionada?.nome
+                                        ?: "Selecione"
+                                }"
+                        )
+                    }
+                }
+
+
+                // -------------------------
+                // SAÍDA
+                // -------------------------
+
+                if (tipo == "Saída") {
+
+                    Spacer(
+                        modifier = Modifier.height(12.dp)
+                    )
+
+                    Button(
+                        onClick = {
+                            mostrarSelecaoFormaPagamento = true
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+
+                        Text(
+                            text =
+                                if (formaPagamento.isBlank()) {
+                                    "Forma de pagamento: Selecione"
+                                } else {
+                                    "Forma de pagamento: $formaPagamento"
+                                }
+                        )
+                    }
+
+
+                    // SAÍDA PELA CONTA
+
+                    if (formaPagamento == "Conta") {
+
+                        Spacer(
+                            modifier = Modifier.height(12.dp)
                         )
 
-                        onSalvar(movimentacao)
+                        Button(
+                            onClick = {
+                                mostrarSelecaoConta = true
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+
+                            Text(
+                                text =
+                                    "Conta: ${
+                                        contaSelecionada?.nome
+                                            ?: "Selecione"
+                                    }"
+                            )
+                        }
                     }
-                },
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text("Salvar")
-            }
 
-            Spacer(
-                modifier = Modifier.height(12.dp)
-            )
 
-            Button(
-                onClick = onVoltar,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text("Voltar")
+                    // SAÍDA NO CRÉDITO
+
+                    if (formaPagamento == "Crédito") {
+
+                        Spacer(
+                            modifier = Modifier.height(12.dp)
+                        )
+
+                        Button(
+                            onClick = {
+                                mostrarSelecaoCartao = true
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+
+                            Text(
+                                text =
+                                    "Cartão: ${
+                                        cartaoSelecionado?.nome
+                                            ?: "Selecione"
+                                    }"
+                            )
+                        }
+
+                        Spacer(
+                            modifier = Modifier.height(12.dp)
+                        )
+
+                        Button(
+                            onClick = {
+                                mostrarSelecaoParcelas = true
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+
+                            Text(
+                                text =
+                                    "Parcelas: ${quantidadeParcelas}x"
+                            )
+                        }
+                    }
+
+
+                    if (formaPagamento.isNotBlank()) {
+
+                        Spacer(
+                            modifier = Modifier.height(12.dp)
+                        )
+
+                        Button(
+                            onClick = {
+                                mostrarSelecaoCategoria = true
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+
+                            Text(
+                                text =
+                                    "Categoria: ${
+                                        categoriaSelecionada?.nome
+                                            ?: "Selecione"
+                                    }"
+                            )
+                        }
+                    }
+                }
+
+
+                // -------------------------
+                // TRANSFERÊNCIA
+                // -------------------------
+
+                if (tipo == "Transferência") {
+
+                    Spacer(
+                        modifier = Modifier.height(12.dp)
+                    )
+
+                    Button(
+                        onClick = {
+                            mostrarSelecaoConta = true
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+
+                        Text(
+                            text =
+                                "Conta de origem: ${
+                                    contaSelecionada?.nome
+                                        ?: "Selecione"
+                                }"
+                        )
+                    }
+
+                    Spacer(
+                        modifier = Modifier.height(12.dp)
+                    )
+
+                    Button(
+                        onClick = {
+                            mostrarSelecaoContaDestino = true
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+
+                        Text(
+                            text =
+                                "Conta de destino: ${
+                                    contaDestinoSelecionada?.nome
+                                        ?: "Selecione"
+                                }"
+                        )
+                    }
+                }
+
+
+                // DATA
+
+                if (tipo.isNotBlank()) {
+
+                    Spacer(
+                        modifier = Modifier.height(12.dp)
+                    )
+
+                    Button(
+                        onClick = {
+                            mostrarCalendario = true
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+
+                        Text(
+                            text = "Data: $data"
+                        )
+                    }
+                }
+
+
+                // MENSAGEM
+
+                if (mensagem.isNotBlank()) {
+
+                    Spacer(
+                        modifier = Modifier.height(12.dp)
+                    )
+
+                    Text(
+                        text = mensagem
+                    )
+                }
+
+
+                // SALVAR
+
+                if (tipo.isNotBlank()) {
+
+                    Spacer(
+                        modifier = Modifier.height(24.dp)
+                    )
+
+                    Button(
+                        onClick = {
+
+                            val valorConvertido =
+                                valor
+                                    .replace(".", "")
+                                    .replace(",", ".")
+                                    .toDoubleOrNull()
+
+                            val parcelasConvertidas =
+                                quantidadeParcelas
+                                    .toIntOrNull()
+                                    ?: 1
+
+
+                            if (descricao.isBlank()) {
+
+                                mensagem =
+                                    "Digite a descrição."
+
+                            } else if (
+                                valorConvertido == null ||
+                                valorConvertido <= 0
+                            ) {
+
+                                mensagem =
+                                    "Digite um valor válido."
+
+                            } else if (
+                                tipo == "Entrada" &&
+                                contaSelecionada == null
+                            ) {
+
+                                mensagem =
+                                    "Selecione a conta."
+
+                            } else if (
+                                tipo == "Entrada" &&
+                                categoriaSelecionada == null
+                            ) {
+
+                                mensagem =
+                                    "Selecione a categoria."
+
+                            } else if (
+                                tipo == "Saída" &&
+                                formaPagamento.isBlank()
+                            ) {
+
+                                mensagem =
+                                    "Selecione a forma de pagamento."
+
+                            } else if (
+                                tipo == "Saída" &&
+                                formaPagamento == "Conta" &&
+                                contaSelecionada == null
+                            ) {
+
+                                mensagem =
+                                    "Selecione a conta."
+
+                            } else if (
+                                tipo == "Saída" &&
+                                formaPagamento == "Crédito" &&
+                                cartaoSelecionado == null
+                            ) {
+
+                                mensagem =
+                                    "Selecione o cartão."
+
+                            } else if (
+                                tipo == "Saída" &&
+                                categoriaSelecionada == null
+                            ) {
+
+                                mensagem =
+                                    "Selecione a categoria."
+
+                            } else if (
+                                tipo == "Transferência" &&
+                                contaSelecionada == null
+                            ) {
+
+                                mensagem =
+                                    "Selecione a conta de origem."
+
+                            } else if (
+                                tipo == "Transferência" &&
+                                contaDestinoSelecionada == null
+                            ) {
+
+                                mensagem =
+                                    "Selecione a conta de destino."
+
+                            } else if (
+                                tipo == "Transferência" &&
+                                contaSelecionada?.id ==
+                                contaDestinoSelecionada?.id
+                            ) {
+
+                                mensagem =
+                                    "A conta de origem e destino devem ser diferentes."
+
+                            } else {
+
+                                val movimentacao =
+                                    Movimentacao(
+
+                                        id =
+                                            movimentacaoParaEditar
+                                                ?.id
+                                                ?: 0,
+
+                                        descricao =
+                                            descricao.trim(),
+
+                                        valor =
+                                            valorConvertido,
+
+                                        tipo =
+                                            tipo,
+
+                                        formaPagamento =
+                                            if (tipo == "Saída") {
+                                                formaPagamento
+                                            } else {
+                                                null
+                                            },
+
+                                        contaId =
+                                            if (
+                                                tipo == "Entrada" ||
+                                                tipo == "Transferência" ||
+                                                (
+                                                        tipo == "Saída" &&
+                                                                formaPagamento == "Conta"
+                                                        )
+                                            ) {
+                                                contaSelecionada?.id
+                                            } else {
+                                                null
+                                            },
+
+                                        contaNome =
+                                            contaSelecionada?.nome,
+
+                                        contaDestinoId =
+                                            if (
+                                                tipo == "Transferência"
+                                            ) {
+                                                contaDestinoSelecionada?.id
+                                            } else {
+                                                null
+                                            },
+
+                                        contaDestinoNome =
+                                            if (
+                                                tipo == "Transferência"
+                                            ) {
+                                                contaDestinoSelecionada?.nome
+                                            } else {
+                                                null
+                                            },
+
+                                        categoriaId =
+                                            if (
+                                                tipo != "Transferência"
+                                            ) {
+                                                categoriaSelecionada?.id
+                                            } else {
+                                                null
+                                            },
+
+                                        categoriaNome =
+                                            if (
+                                                tipo != "Transferência"
+                                            ) {
+                                                categoriaSelecionada?.nome
+                                            } else {
+                                                null
+                                            },
+
+                                        cartaoId =
+                                            if (
+                                                tipo == "Saída" &&
+                                                formaPagamento == "Crédito"
+                                            ) {
+                                                cartaoSelecionado?.id
+                                            } else {
+                                                null
+                                            },
+
+                                        cartaoNome =
+                                            if (
+                                                tipo == "Saída" &&
+                                                formaPagamento == "Crédito"
+                                            ) {
+                                                cartaoSelecionado?.nome
+                                            } else {
+                                                null
+                                            },
+
+                                        quantidadeParcelas =
+                                            if (
+                                                tipo == "Saída" &&
+                                                formaPagamento == "Crédito"
+                                            ) {
+                                                parcelasConvertidas
+                                            } else {
+                                                1
+                                            },
+
+                                        data =
+                                            data
+                                    )
+
+                                onSalvar(movimentacao)
+                            }
+                        },
+
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+
+                        Text(
+                            text =
+                                if (
+                                    movimentacaoParaEditar == null
+                                ) {
+                                    "Salvar movimentação"
+                                } else {
+                                    "Salvar alterações"
+                                }
+                        )
+                    }
+                }
+
+
+                // TEMPORÁRIO
+                //
+                // Vamos retirar esse botão quando implementarmos
+                // corretamente o gesto Back do Android.
+
+                Spacer(
+                    modifier = Modifier.height(12.dp)
+                )
+
+                Button(
+                    onClick = onVoltar,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Voltar")
+                }
+
+                Spacer(
+                    modifier = Modifier.height(24.dp)
+                )
             }
         }
+
+
+        // =====================================================
+        // POPUP - TIPO
+        // =====================================================
+
+        if (mostrarSelecaoTipo) {
+
+            AlertDialog(
+                onDismissRequest = {
+                    mostrarSelecaoTipo = false
+                },
+
+                title = {
+                    Text("Selecionar tipo")
+                },
+
+                text = {
+
+                    Column {
+
+                        Button(
+                            onClick = {
+
+                                tipo = "Entrada"
+
+                                formaPagamento = ""
+
+                                cartaoSelecionado = null
+
+                                contaDestinoSelecionada = null
+
+                                quantidadeParcelas = "1"
+
+                                mostrarSelecaoTipo = false
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("Entrada")
+                        }
+
+                        Spacer(
+                            modifier = Modifier.height(8.dp)
+                        )
+
+                        Button(
+                            onClick = {
+
+                                tipo = "Saída"
+
+                                contaDestinoSelecionada = null
+
+                                mostrarSelecaoTipo = false
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("Saída")
+                        }
+
+                        Spacer(
+                            modifier = Modifier.height(8.dp)
+                        )
+
+                        Button(
+                            onClick = {
+
+                                tipo = "Transferência"
+
+                                formaPagamento = ""
+
+                                categoriaSelecionada = null
+
+                                cartaoSelecionado = null
+
+                                quantidadeParcelas = "1"
+
+                                mostrarSelecaoTipo = false
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("Transferência")
+                        }
+                    }
+                },
+
+                confirmButton = {},
+
+                dismissButton = {
+
+                    TextButton(
+                        onClick = {
+                            mostrarSelecaoTipo = false
+                        }
+                    ) {
+                        Text("Cancelar")
+                    }
+                }
+            )
+        }
+
+
+        // =====================================================
+        // POPUP - FORMA DE PAGAMENTO
+        // =====================================================
+
+        if (mostrarSelecaoFormaPagamento) {
+
+            AlertDialog(
+                onDismissRequest = {
+                    mostrarSelecaoFormaPagamento = false
+                },
+
+                title = {
+                    Text("Forma de pagamento")
+                },
+
+                text = {
+
+                    Column {
+
+                        Button(
+                            onClick = {
+
+                                formaPagamento = "Conta"
+
+                                cartaoSelecionado = null
+
+                                quantidadeParcelas = "1"
+
+                                mostrarSelecaoFormaPagamento =
+                                    false
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("Conta / Débito")
+                        }
+
+                        Spacer(
+                            modifier = Modifier.height(8.dp)
+                        )
+
+                        Button(
+                            onClick = {
+
+                                formaPagamento = "Crédito"
+
+                                contaSelecionada = null
+
+                                mostrarSelecaoFormaPagamento =
+                                    false
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("Crédito")
+                        }
+                    }
+                },
+
+                confirmButton = {},
+
+                dismissButton = {
+
+                    TextButton(
+                        onClick = {
+                            mostrarSelecaoFormaPagamento =
+                                false
+                        }
+                    ) {
+                        Text("Cancelar")
+                    }
+                }
+            )
+        }
+
+
+        // =====================================================
+        // POPUP - CONTA
+        // =====================================================
+
+        if (mostrarSelecaoConta) {
+
+            AlertDialog(
+                onDismissRequest = {
+                    mostrarSelecaoConta = false
+                },
+
+                title = {
+
+                    Text(
+                        text =
+                            if (tipo == "Transferência") {
+                                "Conta de origem"
+                            } else {
+                                "Selecionar conta"
+                            }
+                    )
+                },
+
+                text = {
+
+                    Column {
+
+                        contas.forEach { conta ->
+
+                            Button(
+                                onClick = {
+                                    contaSelecionada = conta
+                                    mostrarSelecaoConta = false
+                                },
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text(conta.nome)
+                            }
+
+                            Spacer(
+                                modifier = Modifier.height(6.dp)
+                            )
+                        }
+                    }
+                },
+
+                confirmButton = {},
+
+                dismissButton = {
+
+                    TextButton(
+                        onClick = {
+                            mostrarSelecaoConta = false
+                        }
+                    ) {
+                        Text("Cancelar")
+                    }
+                }
+            )
+        }
+
+
+        // =====================================================
+        // POPUP - CONTA DESTINO
+        // =====================================================
+
+        if (mostrarSelecaoContaDestino) {
+
+            AlertDialog(
+                onDismissRequest = {
+                    mostrarSelecaoContaDestino = false
+                },
+
+                title = {
+                    Text("Conta de destino")
+                },
+
+                text = {
+
+                    Column {
+
+                        contas
+                            .filter {
+                                it.id != contaSelecionada?.id
+                            }
+                            .forEach { conta ->
+
+                                Button(
+                                    onClick = {
+
+                                        contaDestinoSelecionada =
+                                            conta
+
+                                        mostrarSelecaoContaDestino =
+                                            false
+                                    },
+                                    modifier =
+                                        Modifier.fillMaxWidth()
+                                ) {
+                                    Text(conta.nome)
+                                }
+
+                                Spacer(
+                                    modifier =
+                                        Modifier.height(6.dp)
+                                )
+                            }
+                    }
+                },
+
+                confirmButton = {},
+
+                dismissButton = {
+
+                    TextButton(
+                        onClick = {
+                            mostrarSelecaoContaDestino =
+                                false
+                        }
+                    ) {
+                        Text("Cancelar")
+                    }
+                }
+            )
+        }
+
+
+        // =====================================================
+        // POPUP - CATEGORIA
+        // =====================================================
+
+        if (mostrarSelecaoCategoria) {
+
+            AlertDialog(
+                onDismissRequest = {
+                    mostrarSelecaoCategoria = false
+                },
+
+                title = {
+                    Text("Selecionar categoria")
+                },
+
+                text = {
+
+                    Column {
+
+                        categorias.forEach { categoria ->
+
+                            Button(
+                                onClick = {
+
+                                    categoriaSelecionada =
+                                        categoria
+
+                                    mostrarSelecaoCategoria =
+                                        false
+                                },
+                                modifier =
+                                    Modifier.fillMaxWidth()
+                            ) {
+                                Text(categoria.nome)
+                            }
+
+                            Spacer(
+                                modifier =
+                                    Modifier.height(6.dp)
+                            )
+                        }
+                    }
+                },
+
+                confirmButton = {},
+
+                dismissButton = {
+
+                    TextButton(
+                        onClick = {
+                            mostrarSelecaoCategoria = false
+                        }
+                    ) {
+                        Text("Cancelar")
+                    }
+                }
+            )
+        }
+
+
+        // =====================================================
+        // POPUP - CARTÃO
+        // =====================================================
+
+        if (mostrarSelecaoCartao) {
+
+            AlertDialog(
+                onDismissRequest = {
+                    mostrarSelecaoCartao = false
+                },
+
+                title = {
+                    Text("Selecionar cartão")
+                },
+
+                text = {
+
+                    Column {
+
+                        cartoes.forEach { cartao ->
+
+                            Button(
+                                onClick = {
+
+                                    cartaoSelecionado =
+                                        cartao
+
+                                    mostrarSelecaoCartao =
+                                        false
+                                },
+                                modifier =
+                                    Modifier.fillMaxWidth()
+                            ) {
+                                Text(cartao.nome)
+                            }
+
+                            Spacer(
+                                modifier =
+                                    Modifier.height(6.dp)
+                            )
+                        }
+                    }
+                },
+
+                confirmButton = {},
+
+                dismissButton = {
+
+                    TextButton(
+                        onClick = {
+                            mostrarSelecaoCartao = false
+                        }
+                    ) {
+                        Text("Cancelar")
+                    }
+                }
+            )
+        }
+
+
+        // =====================================================
+        // POPUP - PARCELAS
+        // =====================================================
+
+        if (mostrarSelecaoParcelas) {
+
+            AlertDialog(
+                onDismissRequest = {
+                    mostrarSelecaoParcelas = false
+                },
+
+                title = {
+                    Text("Número de parcelas")
+                },
+
+                text = {
+
+                    LazyColumn {
+
+                        items(
+                            items = (1..24).toList()
+                        ) { numero ->
+
+                            Button(
+                                onClick = {
+
+                                    quantidadeParcelas =
+                                        numero.toString()
+
+                                    mostrarSelecaoParcelas =
+                                        false
+                                },
+                                modifier =
+                                    Modifier.fillMaxWidth()
+                            ) {
+
+                                Text(
+                                    text =
+                                        if (numero == 1) {
+                                            "1x - À vista"
+                                        } else {
+                                            "${numero}x"
+                                        }
+                                )
+                            }
+
+                            Spacer(
+                                modifier =
+                                    Modifier.height(6.dp)
+                            )
+                        }
+                    }
+                },
+
+                confirmButton = {},
+
+                dismissButton = {
+
+                    TextButton(
+                        onClick = {
+                            mostrarSelecaoParcelas = false
+                        }
+                    ) {
+                        Text("Cancelar")
+                    }
+                }
+            )
+        }
+
+
+        // =====================================================
+        // CALENDÁRIO
+        // =====================================================
 
         if (mostrarCalendario) {
 
@@ -1299,6 +2359,7 @@ fun TelaNovaMovimentacao(
         }
     }
 }
+
 @Composable
 fun ContaItem(
     nome: String,
@@ -1854,6 +2915,9 @@ fun TelaCartoes(
             Int,
             (Boolean) -> Unit
             ) -> Unit,
+
+    onExcluir: (CartaoComConta) -> Unit,
+
     onVoltar: () -> Unit
 ) {
 
@@ -1883,6 +2947,10 @@ fun TelaCartoes(
     }
 
     var cartaoParaEditar by remember {
+        mutableStateOf<CartaoComConta?>(null)
+    }
+
+    var cartaoParaExcluir by remember {
         mutableStateOf<CartaoComConta?>(null)
     }
 
@@ -2253,6 +3321,19 @@ fun TelaCartoes(
                     ) {
                         Text("Editar")
                     }
+
+                    Spacer(
+                        modifier = Modifier.height(8.dp)
+                    )
+
+                    Button(
+                        onClick = {
+                            cartaoParaExcluir = cartao
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Excluir")
+                    }
                 }
             }
 
@@ -2273,6 +3354,276 @@ fun TelaCartoes(
                     modifier = Modifier.height(24.dp)
                 )
             }
+        }
+
+        cartaoParaEditar?.let { cartao ->
+
+            AlertDialog(
+                onDismissRequest = {
+                    cartaoParaEditar = null
+                    mensagemEdicao = ""
+                },
+
+                title = {
+                    Text("Editar cartão")
+                },
+
+                text = {
+
+                    Column {
+
+                        OutlinedTextField(
+                            value = novoNomeCartao,
+                            onValueChange = {
+                                novoNomeCartao = it
+                                mensagemEdicao = ""
+                            },
+                            label = {
+                                Text("Nome do cartão")
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+
+                        Spacer(
+                            modifier = Modifier.height(12.dp)
+                        )
+
+                        OutlinedTextField(
+                            value = novoLimiteCartao,
+                            onValueChange = {
+                                novoLimiteCartao = it
+                                mensagemEdicao = ""
+                            },
+                            label = {
+                                Text("Limite")
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+
+                        Spacer(
+                            modifier = Modifier.height(12.dp)
+                        )
+
+                        OutlinedTextField(
+                            value = novoFechamentoCartao,
+                            onValueChange = {
+                                novoFechamentoCartao = it
+                                mensagemEdicao = ""
+                            },
+                            label = {
+                                Text("Dia de fechamento")
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+
+                        Spacer(
+                            modifier = Modifier.height(12.dp)
+                        )
+
+                        OutlinedTextField(
+                            value = novoVencimentoCartao,
+                            onValueChange = {
+                                novoVencimentoCartao = it
+                                mensagemEdicao = ""
+                            },
+                            label = {
+                                Text("Dia de vencimento")
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+
+                        Spacer(
+                            modifier = Modifier.height(12.dp)
+                        )
+
+                        Box(
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+
+                            Button(
+                                onClick = {
+                                    menuNovaContaAberto = true
+                                },
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+
+                                Text(
+                                    text =
+                                        "Conta: ${novaContaCartao?.nome ?: "Selecione"}"
+                                )
+                            }
+
+                            DropdownMenu(
+                                expanded = menuNovaContaAberto,
+                                onDismissRequest = {
+                                    menuNovaContaAberto = false
+                                }
+                            ) {
+
+                                contas.forEach { conta ->
+
+                                    DropdownMenuItem(
+                                        text = {
+                                            Text(conta.nome)
+                                        },
+                                        onClick = {
+                                            novaContaCartao = conta
+                                            menuNovaContaAberto = false
+                                        }
+                                    )
+                                }
+                            }
+                        }
+
+                        if (mensagemEdicao.isNotBlank()) {
+
+                            Spacer(
+                                modifier = Modifier.height(8.dp)
+                            )
+
+                            Text(
+                                text = mensagemEdicao
+                            )
+                        }
+                    }
+                },
+
+                confirmButton = {
+
+                    TextButton(
+                        onClick = {
+
+                            val limiteConvertido =
+                                novoLimiteCartao
+                                    .replace(".", "")
+                                    .replace(",", ".")
+                                    .toDoubleOrNull()
+
+                            val fechamentoConvertido =
+                                novoFechamentoCartao.toIntOrNull()
+
+                            val vencimentoConvertido =
+                                novoVencimentoCartao.toIntOrNull()
+
+                            val contaEscolhida =
+                                novaContaCartao
+
+                            if (novoNomeCartao.isBlank()) {
+
+                                mensagemEdicao =
+                                    "Digite o nome do cartão."
+
+                            } else if (limiteConvertido == null) {
+
+                                mensagemEdicao =
+                                    "Digite um limite válido."
+
+                            } else if (
+                                fechamentoConvertido == null ||
+                                fechamentoConvertido !in 1..31
+                            ) {
+
+                                mensagemEdicao =
+                                    "O dia de fechamento deve estar entre 1 e 31."
+
+                            } else if (
+                                vencimentoConvertido == null ||
+                                vencimentoConvertido !in 1..31
+                            ) {
+
+                                mensagemEdicao =
+                                    "O dia de vencimento deve estar entre 1 e 31."
+
+                            } else if (contaEscolhida == null) {
+
+                                mensagemEdicao =
+                                    "Selecione uma conta."
+
+                            } else {
+
+                                onEditar(
+                                    cartao,
+                                    novoNomeCartao,
+                                    limiteConvertido,
+                                    fechamentoConvertido,
+                                    vencimentoConvertido,
+                                    contaEscolhida.id
+                                ) { sucesso ->
+
+                                    if (sucesso) {
+
+                                        cartaoParaEditar = null
+                                        mensagemEdicao = ""
+
+                                    } else {
+
+                                        mensagemEdicao =
+                                            "Já existe outro cartão com esse nome."
+                                    }
+                                }
+                            }
+                        }
+                    ) {
+                        Text("Salvar")
+                    }
+                },
+
+                dismissButton = {
+
+                    TextButton(
+                        onClick = {
+                            cartaoParaEditar = null
+                            mensagemEdicao = ""
+                        }
+                    ) {
+                        Text("Cancelar")
+                    }
+                }
+            )
+        }
+        cartaoParaExcluir?.let { cartao ->
+
+            AlertDialog(
+                onDismissRequest = {
+                    cartaoParaExcluir = null
+                },
+
+                title = {
+                    Text("Excluir cartão?")
+                },
+
+                text = {
+                    Text(
+                        text =
+                            "Deseja excluir o cartão \"${cartao.nome}\" definitivamente?"
+                    )
+                },
+
+                confirmButton = {
+
+                    TextButton(
+                        onClick = {
+
+                            onExcluir(cartao)
+
+                            cartaoParaExcluir = null
+                        }
+                    ) {
+                        Text("Excluir")
+                    }
+                },
+
+                dismissButton = {
+
+                    TextButton(
+                        onClick = {
+                            cartaoParaExcluir = null
+                        }
+                    ) {
+                        Text("Cancelar")
+                    }
+                }
+            )
         }
     }
 }
@@ -2790,24 +4141,32 @@ fun TelaHistorico(
     val anos =
         listOf("Todos") + anosDisponiveis
 
-    val contasDisponiveis =
+    val contasDisponiveis: List<String> =
         listOf("Todas") +
                 movimentacoes
-                    .map { it.contaNome }
+                    .flatMap { movimentacao ->
+                        listOfNotNull(
+                            movimentacao.contaNome,
+                            movimentacao.contaDestinoNome
+                        )
+                    }
                     .distinct()
                     .sorted()
 
-    val categoriasDisponiveis =
+    val categoriasDisponiveis: List<String> =
         listOf("Todas") +
                 movimentacoes
-                    .map { it.categoriaNome }
+                    .mapNotNull { movimentacao ->
+                        movimentacao.categoriaNome
+                    }
                     .distinct()
                     .sorted()
 
     val tipos = listOf(
         "Todos",
         "Entrada",
-        "Saída"
+        "Saída",
+        "Transferência"
     )
 
     val movimentacoesFiltradas =
@@ -2835,7 +4194,8 @@ fun TelaHistorico(
 
                 val contaCorreta =
                     contaSelecionada == "Todas" ||
-                            movimentacao.contaNome == contaSelecionada
+                            movimentacao.contaNome == contaSelecionada ||
+                            movimentacao.contaDestinoNome == contaSelecionada
 
                 val categoriaCorreta =
                     categoriaSelecionada == "Todas" ||
@@ -3048,17 +4408,17 @@ fun TelaHistorico(
 
                                 Text(
                                     text =
-                                        if (
-                                            movimentacao.tipo == "Entrada"
-                                        ) {
-                                            "+ R$ %.2f".format(
-                                                movimentacao.valor
-                                            )
-                                        } else {
-                                            "- R$ %.2f".format(
-                                                movimentacao.valor
-                                            )
-                                        },
+                                       when (movimentacao.tipo){
+                                           "Entrada" ->
+                                               "+ ${formatarDinheiro(movimentacao.valor)}"
+                                           "Saída" ->
+                                               "- ${formatarDinheiro(movimentacao.valor)}"
+                                           "Transferência" ->
+                                               formatarDinheiro(movimentacao.valor)
+
+                                           else ->
+                                               formatarDinheiro(movimentacao.valor)
+                                       },
                                     fontWeight = FontWeight.Bold
                                 )
                             }
@@ -3067,10 +4427,44 @@ fun TelaHistorico(
                                 modifier = Modifier.height(4.dp)
                             )
 
+                            val detalheMovimentacao =
+                                when {
+
+                                    movimentacao.tipo == "Transferência" -> {
+
+                                        "${movimentacao.contaNome ?: "Conta"} → " +
+                                                (movimentacao.contaDestinoNome ?: "Conta")
+                                    }
+
+                                    movimentacao.tipo == "Saída" &&
+                                            movimentacao.formaPagamento == "Crédito" -> {
+
+                                        val parcelas =
+                                            if (movimentacao.quantidadeParcelas > 1) {
+                                                " • ${movimentacao.quantidadeParcelas}x"
+                                            } else {
+                                                ""
+                                            }
+
+                                        "${movimentacao.cartaoNome ?: "Cartão"} • Crédito$parcelas"
+                                    }
+
+                                    movimentacao.tipo == "Saída" -> {
+
+                                        "${movimentacao.contaNome ?: "Conta"} • " +
+                                                (movimentacao.categoriaNome ?: "Sem categoria")
+                                    }
+
+                                    movimentacao.tipo == "Entrada" -> {
+
+                                        "${movimentacao.contaNome ?: "Conta"} • " +
+                                                (movimentacao.categoriaNome ?: "Sem categoria")
+                                    }
+
+                                    else -> ""
+                                }
                             Text(
-                                text =
-                                    "${movimentacao.contaNome} • " +
-                                            movimentacao.categoriaNome
+                                text = detalheMovimentacao
                             )
 
                             Spacer(
@@ -3331,14 +4725,19 @@ fun TelaHistorico(
 
                         Text(
                             text =
-                                if (movimentacao.tipo == "Entrada") {
-                                    "Entrada: R$ %.2f".format(
-                                        movimentacao.valor
-                                    )
-                                } else {
-                                    "Saída: R$ %.2f".format(
-                                        movimentacao.valor
-                                    )
+                                when (movimentacao.tipo) {
+
+                                    "Entrada" ->
+                                        "Entrada: ${formatarDinheiro(movimentacao.valor)}"
+
+                                    "Saída" ->
+                                        "Saída: ${formatarDinheiro(movimentacao.valor)}"
+
+                                    "Transferência" ->
+                                        "Transferência: ${formatarDinheiro(movimentacao.valor)}"
+
+                                    else ->
+                                        formatarDinheiro(movimentacao.valor)
                                 }
                         )
 
@@ -3346,12 +4745,98 @@ fun TelaHistorico(
                             modifier = Modifier.height(8.dp)
                         )
 
-                        Text(
-                            text = "Conta: ${movimentacao.contaNome}"
-                        )
 
-                        Text(
-                            text = "Categoria: ${movimentacao.categoriaNome}"
+                        when {
+
+                            movimentacao.tipo == "Transferência" -> {
+
+                                Text(
+                                    text =
+                                        "Origem: ${
+                                            movimentacao.contaNome
+                                                ?: "Não informada"
+                                        }"
+                                )
+
+                                Text(
+                                    text =
+                                        "Destino: ${
+                                            movimentacao.contaDestinoNome
+                                                ?: "Não informado"
+                                        }"
+                                )
+                            }
+
+
+                            movimentacao.tipo == "Saída" &&
+                                    movimentacao.formaPagamento == "Crédito" -> {
+
+                                Text(
+                                    text =
+                                        "Forma de pagamento: Crédito"
+                                )
+
+                                Text(
+                                    text =
+                                        "Cartão: ${
+                                            movimentacao.cartaoNome
+                                                ?: "Não informado"
+                                        }"
+                                )
+
+                                Text(
+                                    text =
+                                        "Parcelas: ${
+                                            movimentacao.quantidadeParcelas
+                                        }x"
+                                )
+
+                                Text(
+                                    text =
+                                        "Categoria: ${
+                                            movimentacao.categoriaNome
+                                                ?: "Não informada"
+                                        }"
+                                )
+                            }
+
+
+                            else -> {
+
+                                Text(
+                                    text =
+                                        "Conta: ${
+                                            movimentacao.contaNome
+                                                ?: "Não informada"
+                                        }"
+                                )
+
+                                Text(
+                                    text =
+                                        "Categoria: ${
+                                            movimentacao.categoriaNome
+                                                ?: "Não informada"
+                                        }"
+                                )
+
+                                if (
+                                    movimentacao.tipo == "Saída"
+                                ) {
+
+                                    Text(
+                                        text =
+                                            "Forma de pagamento: ${
+                                                movimentacao.formaPagamento
+                                                    ?: "Não informada"
+                                            }"
+                                    )
+                                }
+                            }
+                        }
+
+
+                        Spacer(
+                            modifier = Modifier.height(8.dp)
                         )
 
                         Text(
@@ -3448,6 +4933,88 @@ fun TelaHistorico(
         }
     }
 }
+fun gerarParcelasCartao(
+    movimentacaoId: Int,
+    cartaoId: Int,
+    valorTotal: Double,
+    quantidadeParcelas: Int,
+    dataCompra: String,
+    diaFechamento: Int
+): List<ParcelaCartaoEntity> {
+
+    val partes =
+        dataCompra.split("/")
+
+    if (partes.size != 3) {
+        return emptyList()
+    }
+
+    val diaCompra =
+        partes[0].toIntOrNull()
+            ?: return emptyList()
+
+    val mesCompra =
+        partes[1].toIntOrNull()
+            ?: return emptyList()
+
+    val anoCompra =
+        partes[2].toIntOrNull()
+            ?: return emptyList()
+
+
+    var mesPrimeiraFatura =
+        mesCompra
+
+    var anoPrimeiraFatura =
+        anoCompra
+
+
+    // Compra depois do fechamento:
+    // vai para a fatura seguinte.
+
+    if (diaCompra > diaFechamento) {
+
+        mesPrimeiraFatura++
+
+        if (mesPrimeiraFatura > 12) {
+
+            mesPrimeiraFatura = 1
+            anoPrimeiraFatura++
+        }
+    }
+
+
+    val valorBase =
+        valorTotal / quantidadeParcelas
+
+
+    return (1..quantidadeParcelas).map { numero ->
+
+        var mes =
+            mesPrimeiraFatura + numero - 1
+
+        var ano =
+            anoPrimeiraFatura
+
+
+        while (mes > 12) {
+            mes -= 12
+            ano++
+        }
+
+
+        ParcelaCartaoEntity(
+            movimentacaoId = movimentacaoId,
+            cartaoId = cartaoId,
+            numeroParcela = numero,
+            totalParcelas = quantidadeParcelas,
+            valor = valorBase,
+            mesFatura = mes,
+            anoFatura = ano
+        )
+    }
+}
+
 fun formatarDinheiro(valor: Double): String {
     val formato =
         java.text.NumberFormat

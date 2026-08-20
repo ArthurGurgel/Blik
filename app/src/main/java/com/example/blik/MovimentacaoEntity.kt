@@ -7,6 +7,7 @@ import androidx.room.PrimaryKey
 
 @Entity(
     tableName = "movimentacoes",
+
     foreignKeys = [
         ForeignKey(
             entity = ContaEntity::class,
@@ -16,15 +17,32 @@ import androidx.room.PrimaryKey
         ),
 
         ForeignKey(
+            entity = ContaEntity::class,
+            parentColumns = ["id"],
+            childColumns = ["contaDestinoId"],
+            onDelete = ForeignKey.RESTRICT
+        ),
+
+        ForeignKey(
             entity = CategoriaEntity::class,
             parentColumns = ["id"],
             childColumns = ["categoriaId"],
             onDelete = ForeignKey.RESTRICT
+        ),
+
+        ForeignKey(
+            entity = CartaoEntity::class,
+            parentColumns = ["id"],
+            childColumns = ["cartaoId"],
+            onDelete = ForeignKey.RESTRICT
         )
     ],
+
     indices = [
         Index(value = ["contaId"]),
-        Index(value = ["categoriaId"])
+        Index(value = ["contaDestinoId"]),
+        Index(value = ["categoriaId"]),
+        Index(value = ["cartaoId"])
     ]
 )
 data class MovimentacaoEntity(
@@ -33,9 +51,22 @@ data class MovimentacaoEntity(
     val id: Int = 0,
 
     val descricao: String,
+
     val valor: Double,
+
     val tipo: String,
-    val contaId: Int,
-    val categoriaId: Int,
+
+    val formaPagamento: String? = null,
+
+    val contaId: Int? = null,
+
+    val contaDestinoId: Int? = null,
+
+    val categoriaId: Int? = null,
+
+    val cartaoId: Int? = null,
+
+    val quantidadeParcelas: Int = 1,
+
     val data: String
 )
