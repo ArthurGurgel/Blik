@@ -3,6 +3,7 @@ package com.example.blik
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -57,36 +58,29 @@ import com.example.blik.ui.theme.BlikTheme
 import kotlinx.coroutines.launch
 
 data class Movimentacao(
-
     val id: Int = 0,
-
     val descricao: String,
-
     val valor: Double,
-
     val tipo: String,
-
     val formaPagamento: String? = null,
-
     val contaId: Int? = null,
-
     val contaNome: String? = null,
-
     val contaDestinoId: Int? = null,
-
     val contaDestinoNome: String? = null,
-
     val categoriaId: Int? = null,
-
     val categoriaNome: String? = null,
-
     val cartaoId: Int? = null,
-
     val cartaoNome: String? = null,
-
     val quantidadeParcelas: Int = 1,
-
     val data: String
+)
+
+data class ResumoFatura(
+    val cartaoNome: String,
+    val restante: Double,
+    val fechamento: java.util.Calendar,
+    val vencimento: java.util.Calendar,
+    val status: String
 )
 
 class MainActivity : ComponentActivity() {
@@ -121,9 +115,21 @@ fun AppFinanceiro() {
     val contaDao = banco.contaDao()
     val categoriaDao = banco.categoriaDao()
     val cartaoDao = banco.cartaoDao()
+    val parcelaCartaoDao = banco.parcelaCartaoDao()
+    val pagamentoFaturaDao = banco.pagamentoFaturaDao()
 
-    val parcelaCartaoDao =
-        banco.parcelaCartaoDao()
+
+    val parcelasCartao by parcelaCartaoDao
+        .listarComDetalhes()
+        .collectAsState(initial = emptyList())
+
+    val pagamentosFatura by pagamentoFaturaDao
+        .listarTodos()
+        .collectAsState(initial = emptyList())
+
+    val pagamentosFaturaComConta by pagamentoFaturaDao
+        .listarComConta()
+        .collectAsState(initial = emptyList<PagamentoFaturaComConta>())
 
     val cartoes by cartaoDao
         .listarTodos()
@@ -217,6 +223,10 @@ fun AppFinanceiro() {
             TelaInicial(
                 movimentacoes = movimentacoes,
                 contas = contas,
+                pagamentosFatura = pagamentosFatura,
+                parcelasCartao = parcelasCartao,
+                pagamentosFaturaComConta = pagamentosFaturaComConta,
+                cartoes = cartoes,
 
                 onNovaMovimentacao = {
                     telaAtual = "nova_movimentacao"
@@ -229,6 +239,9 @@ fun AppFinanceiro() {
                 },
                 onCategorias = {
                     telaAtual = "categorias"
+                },
+                onFaturas = {
+                    telaAtual = "faturas"
                 },
                 onHistorico = {
                     telaAtual = "historico"
@@ -315,6 +328,46 @@ fun AppFinanceiro() {
             )
         }
 
+        "faturas" -> {
+            TelaFaturas(
+                parcelas = parcelasCartao,
+                pagamentos = pagamentosFaturaComConta,
+                contas = contas,
+                cartoes = cartoes,
+
+                onPagar = {
+                        cartaoId,
+                        contaId,
+                        mes,
+                        ano,
+                        valor,
+                        data ->
+                            scope.launch {
+                                pagamentoFaturaDao.inserir(
+                                    PagamentoFaturaEntity(
+                                        cartaoId = cartaoId,
+                                        contaId = contaId,
+                                        mesFatura = mes,
+                                        anoFatura = ano,
+                                        valorPago = valor,
+                                        dataPagamento = data
+                                    )
+                                )
+                            }
+                    },
+                    onExcluirPagamento = { pagamento ->
+                        scope.launch {
+                            pagamentoFaturaDao.excluir(
+                                pagamento.id
+                            )
+                        }
+                    },
+
+                    onVoltar = {
+                        telaAtual = "inicio"
+                    }
+            )
+        }
 
         "categorias" -> {
 
@@ -508,31 +561,48 @@ fun AppFinanceiro() {
                             descricao = movimentacao.descricao,
                             valor = movimentacao.valor,
                             tipo = movimentacao.tipo,
-
-                            formaPagamento =
-                                movimentacao.formaPagamento,
-
-                            contaId =
-                                movimentacao.contaId,
-
-                            contaDestinoId =
-                                movimentacao.contaDestinoId,
-
-                            categoriaId =
-                                movimentacao.categoriaId,
-
-                            cartaoId =
-                                movimentacao.cartaoId,
-
-                            quantidadeParcelas =
-                                movimentacao.quantidadeParcelas,
-
-                            data =
-                                movimentacao.data
+                            formaPagamento = movimentacao.formaPagamento,
+                            contaId = movimentacao.contaId,
+                            contaDestinoId = movimentacao.contaDestinoId,
+                            categoriaId = movimentacao.categoriaId,
+                            cartaoId = movimentacao.cartaoId,
+                            quantidadeParcelas = movimentacao.quantidadeParcelas,
+                            data = movimentacao.data
                         )
-
+                        parcelaCartaoDao.excluirPorMovimentacao(
+                            movimentacao.id
+                        )
+                        if (
+                            movimentacao.tipo == "Saída" &&
+                            movimentacao.formaPagamento == "Crédito"
+                        ) {
+                            val cartaoId =
+                                movimentacao.cartaoId
+                            val cartao =
+                                cartoes.find { cartao ->
+                                    cartao.id == cartaoId
+                                }
+                            if (
+                                cartaoId != null &&
+                                cartao != null
+                            ) {
+                                val parcelas =
+                                    gerarParcelasCartao(
+                                        movimentacaoId = movimentacao.id,
+                                        cartaoId = cartaoId,
+                                        valorTotal = movimentacao.valor,
+                                        quantidadeParcelas = movimentacao.quantidadeParcelas,
+                                        dataCompra = movimentacao.data,
+                                        diaFechamento = cartao.diaFechamento
+                                    )
+                                parcelaCartaoDao.inserirTodas(
+                                    parcelas
+                                )
+                            }
+                        }
                         movimentacaoEmEdicao = null
                         telaAtual = "historico"
+
                     }
                 },
 
@@ -647,6 +717,9 @@ fun AppFinanceiro() {
                 onExcluir = { movimentacao ->
 
                     scope.launch {
+                        parcelaCartaoDao.excluirPorMovimentacao(
+                            movimentacao.id
+                        )
                         dao.excluir(
                             movimentacao.id
                         )
@@ -665,11 +738,16 @@ fun AppFinanceiro() {
 fun TelaInicial(
     movimentacoes: List<Movimentacao>,
     contas: List<ContaEntity>,
+    pagamentosFatura: List<PagamentoFaturaEntity>,
+    parcelasCartao: List<ParcelaCartaoComDetalhes>,
+    pagamentosFaturaComConta: List<PagamentoFaturaComConta>,
+    cartoes: List<CartaoComConta>,
     onNovaMovimentacao: () -> Unit,
     onContas: () -> Unit,
     onCategorias: () -> Unit,
     onHistorico: () -> Unit,
-    onCartoes: () -> Unit
+    onCartoes: () -> Unit,
+    onFaturas: () -> Unit
 ) {
     val calendario = java.util.Calendar.getInstance()
 
@@ -683,6 +761,71 @@ fun TelaInicial(
         calendario
             .get(java.util.Calendar.YEAR)
             .toString()
+
+    val mesAtualInt = mesAtual.toInt()
+
+    val anoAtualInt = anoAtual.toInt()
+
+    val parcelasFaturaAtual = parcelasCartao
+        .filter { parcela ->
+            parcela.mesFatura == mesAtualInt &&
+            parcela.anoFatura == anoAtualInt
+        }
+
+    val faturasAtuais = parcelasFaturaAtual
+        .groupBy { parcela ->
+            parcela.cartaoId }
+        .mapNotNull { (cartaoId, parcelasDoCartao) ->
+            val cartao = cartoes.find { item ->
+                            item.id == cartaoId
+                } ?: return@mapNotNull null
+
+            val total = parcelasDoCartao.sumOf { it.valor}
+
+            val pago = pagamentosFaturaComConta
+                .filter { pagamento ->
+                    pagamento.cartaoId == cartaoId &&
+                    pagamento.mesFatura == mesAtualInt &&
+                    pagamento.anoFatura == anoAtualInt
+                }
+                .sumOf { it.valorPago}
+
+            val restante = (total - pago).coerceAtLeast(0.0)
+
+            if (restante < 0.01) { return@mapNotNull null}
+
+            val fechamento = criarDataFatura(
+                dia = cartao.diaFechamento,
+                mes = mesAtualInt,
+                ano = anoAtualInt
+            )
+
+            val vencimento = calcularVencimentoFatura(
+                mesFatura = mesAtualInt,
+                anoFatura = anoAtualInt,
+                diaFechamento = cartao.diaFechamento,
+                diaVencimento = cartao.diaVencimento
+            )
+
+            val status = calcularStatusFatura(
+                restante = restante,
+                mesFatura = mesAtualInt,
+                anoFatura = anoAtualInt,
+                diaFechamento = cartao.diaFechamento,
+                diaVencimento = cartao.diaVencimento
+            )
+
+            ResumoFatura(
+                cartaoNome = cartao.nome,
+                restante = restante,
+                fechamento = fechamento,
+                vencimento = vencimento,
+                status = status
+            )
+        }
+        .sortedBy {
+            it.vencimento.timeInMillis
+        }
 
     val nomesMeses = listOf(
         "Janeiro",
@@ -784,11 +927,21 @@ fun TelaInicial(
                         movimentacao.valor
                     }
 
+            val pagamentosDeFatura: Double =
+                pagamentosFatura
+                    .filter { pagamento ->
+                        pagamento.contaId == conta.id
+                    }
+                    .sumOf { pagamento ->
+                        pagamento.valorPago
+                    }
+
             conta.saldoInicial +
                     entradas -
                     saidasDaConta -
                     transferenciasSaindo +
-                    transferenciasEntrando
+                    transferenciasEntrando -
+                    pagamentosDeFatura
         }
 
     val saldoAtual: Double =
@@ -874,6 +1027,19 @@ fun TelaInicial(
                         }
 
                         onCartoes()
+                    }
+                )
+
+                NavigationDrawerItem(
+                    label = {
+                        Text("Faturas")
+                    },
+                    selected = false,
+                    onClick = {
+                        scope.launch {
+                            drawerState.close()
+                        }
+                        onFaturas()
                     }
                 )
 
@@ -1037,6 +1203,105 @@ fun TelaInicial(
                     modifier = Modifier.height(24.dp)
                 )
 
+                Text(
+                    text = "Faturas",
+                    fontSize = 22.sp,
+                    fontWeight = FontWeight.Bold
+                )
+
+                Spacer(
+                    modifier = Modifier.height(12.dp)
+                )
+
+                if (faturasAtuais.isEmpty()) {
+                    Text(
+                        text = "Nenhuma fatura em aberto neste mês."
+                    )
+                } else {
+                    faturasAtuais.forEach { fatura ->
+                        Card(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 5.dp)
+                                .clickable{
+                                    onFaturas()
+                                }
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(16.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Text(
+                                        text = fatura.cartaoNome,
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 17.sp
+                                    )
+                                    Text(
+                                        text = fatura.status,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                                Spacer(
+                                    modifier = Modifier.height(8.dp)
+                                )
+
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Column(
+                                        modifier = Modifier.weight(1f)
+                                    ){
+                                        val mostrarFechamento = fatura.status == "Aberta"
+                                        val tituloData =
+                                            if (mostrarFechamento) {
+                                                "Fechamento"
+                                            } else {
+                                                "Vencimento"
+                                            }
+                                        val dataExibida =
+                                            if (mostrarFechamento) {
+                                                fatura.fechamento
+                                            } else {
+                                                fatura.vencimento
+                                            }
+                                        Text(
+                                            text = tituloData,
+                                            fontSize = 12.sp
+                                        )
+
+                                        Text(
+                                            text = formatarDataCalendario(
+                                                dataExibida
+                                            ),
+                                            fontWeight = FontWeight.Medium
+                                        )
+                                    }
+                                    Column(
+                                        horizontalAlignment = androidx.compose.ui.Alignment.End
+                                    ){
+                                        Text(
+                                            text = "Em aberto",
+                                            fontSize = 12.sp
+                                        )
+                                        Text(
+                                            text = formatarDinheiro(fatura.restante),
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Spacer(
+                    modifier = Modifier.height(24.dp)
+                )
+
                 Button(
                     onClick = onNovaMovimentacao,
                     modifier = Modifier.fillMaxWidth()
@@ -1057,6 +1322,9 @@ fun TelaNovaMovimentacao(
     onSalvar: (Movimentacao) -> Unit,
     onVoltar: () -> Unit
 ) {
+    BackHandler {
+        onVoltar()
+    }
 
     var descricao by remember {
         mutableStateOf(
@@ -2321,15 +2589,31 @@ fun TelaNovaMovimentacao(
                                 .selectedDateMillis
                                 ?.let { millis ->
 
-                                    val formato =
-                                        SimpleDateFormat(
-                                            "dd/MM/yyyy",
-                                            Locale.getDefault()
+                                    val calendario =
+                                        java.util.Calendar.getInstance(
+                                            java.util.TimeZone.getTimeZone("UTC")
                                         )
+                                    calendario.timeInMillis = millis
 
+                                    val dia =
+                                        calendario.get(
+                                            java.util.Calendar.DAY_OF_MONTH
+                                        )
+                                    val mes =
+                                        calendario.get(
+                                            java.util.Calendar.MONTH
+                                        ) + 1
+                                    val ano =
+                                        calendario.get(
+                                            java.util.Calendar.YEAR
+                                        )
                                     data =
-                                        formato.format(
-                                            Date(millis)
+                                        String.format(
+                                            Locale.getDefault(),
+                                            "%02d/%02d/%04d",
+                                            dia,
+                                            mes,
+                                            ano
                                         )
                                 }
 
@@ -2413,6 +2697,9 @@ fun TelaContas(
             ) -> Unit,
     onVoltar: () -> Unit
 ) {
+    BackHandler {
+        onVoltar()
+    }
 
     var nomeNovaConta by remember {
         mutableStateOf("")
@@ -2920,6 +3207,9 @@ fun TelaCartoes(
 
     onVoltar: () -> Unit
 ) {
+    BackHandler {
+        onVoltar()
+    }
 
     var nomeCartao by remember {
         mutableStateOf("")
@@ -3649,6 +3939,9 @@ fun TelaCategorias(
 
     onVoltar: () -> Unit
 ) {
+    BackHandler {
+        onVoltar()
+    }
 
     var nomeNovaCategoria by remember {
         mutableStateOf("")
@@ -4059,6 +4352,9 @@ fun TelaHistorico(
     onExcluir: (Movimentacao) -> Unit,
     onVoltar: () -> Unit
 ) {
+    BackHandler {
+        onVoltar()
+    }
 
 
     var movimentacaoSelecionada by remember {
@@ -4933,6 +5229,1236 @@ fun TelaHistorico(
         }
     }
 }
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun TelaFaturas(
+    parcelas: List<ParcelaCartaoComDetalhes>,
+    pagamentos: List<PagamentoFaturaComConta>,
+    contas: List<ContaEntity>,
+    cartoes: List<CartaoComConta>,
+
+    onPagar: (
+        Int,
+        Int,
+        Int,
+        Int,
+        Double,
+        String
+    ) -> Unit,
+
+    onExcluirPagamento: (
+        PagamentoFaturaComConta
+    ) -> Unit,
+
+    onVoltar: () -> Unit
+) {
+
+    BackHandler {
+        onVoltar()
+    }
+
+    val calendario =
+        java.util.Calendar.getInstance()
+
+    var mesSelecionado by remember {
+        mutableStateOf(
+            calendario.get(
+                java.util.Calendar.MONTH
+            ) + 1
+        )
+    }
+
+    var anoSelecionado by remember {
+        mutableStateOf(
+            calendario.get(
+                java.util.Calendar.YEAR
+            )
+        )
+    }
+
+    var mostrarSelecaoMes by remember {
+        mutableStateOf(false)
+    }
+
+    var mostrarSelecaoAno by remember {
+        mutableStateOf(false)
+    }
+
+
+    // PAGAMENTO
+
+    var cartaoParaPagamento by remember {
+        mutableStateOf<Int?>(null)
+    }
+
+    var nomeCartaoParaPagamento by remember {
+        mutableStateOf("")
+    }
+
+    var valorRestantePagamento by remember {
+        mutableStateOf(0.0)
+    }
+
+    var valorPagamento by remember {
+        mutableStateOf("")
+    }
+
+    var contaPagamento by remember {
+        mutableStateOf<ContaEntity?>(null)
+    }
+
+    var mostrarSelecaoContaPagamento by remember {
+        mutableStateOf(false)
+    }
+
+    var dataPagamento by remember {
+        mutableStateOf(
+            SimpleDateFormat(
+                "dd/MM/yyyy",
+                Locale.getDefault()
+            ).format(Date())
+        )
+    }
+
+    var mostrarCalendarioPagamento by remember {
+        mutableStateOf(false)
+    }
+
+    var mensagemPagamento by remember {
+        mutableStateOf("")
+    }
+
+    var pagamentoParaExcluir by remember {
+        mutableStateOf<PagamentoFaturaComConta?>(
+            null
+        )
+    }
+
+    val nomesMeses =
+        listOf(
+            "Janeiro",
+            "Fevereiro",
+            "Março",
+            "Abril",
+            "Maio",
+            "Junho",
+            "Julho",
+            "Agosto",
+            "Setembro",
+            "Outubro",
+            "Novembro",
+            "Dezembro"
+        )
+
+
+    val parcelasDaFatura =
+        parcelas.filter { parcela ->
+
+            parcela.mesFatura == mesSelecionado &&
+                    parcela.anoFatura == anoSelecionado
+        }
+
+
+    val faturasPorCartao =
+        parcelasDaFatura.groupBy { parcela ->
+            parcela.cartaoId
+        }
+
+
+    val anosDisponiveis =
+        (
+                parcelas
+                    .map { parcela ->
+                        parcela.anoFatura
+                    } +
+                        listOf(
+                            calendario.get(
+                                java.util.Calendar.YEAR
+                            )
+                        )
+                )
+            .distinct()
+            .sortedDescending()
+
+
+    Scaffold(
+        modifier = Modifier.fillMaxSize(),
+        containerColor =
+            MaterialTheme.colorScheme.background
+    ) { innerPadding ->
+
+        LazyColumn(
+            modifier = Modifier
+                .padding(innerPadding)
+                .padding(horizontal = 20.dp)
+                .fillMaxSize()
+        ) {
+
+            // =====================================================
+            // CABEÇALHO
+            // =====================================================
+
+            item {
+
+                Spacer(
+                    modifier = Modifier.height(20.dp)
+                )
+
+                Text(
+                    text = "Faturas",
+                    fontSize = 28.sp,
+                    fontWeight = FontWeight.Bold
+                )
+
+                Spacer(
+                    modifier = Modifier.height(20.dp)
+                )
+
+
+                Row(
+                    modifier =
+                        Modifier.fillMaxWidth(),
+
+                    horizontalArrangement =
+                        Arrangement.spacedBy(8.dp)
+                ) {
+
+                    Button(
+                        onClick = {
+                            mostrarSelecaoMes = true
+                        },
+                        modifier =
+                            Modifier.weight(1f)
+                    ) {
+
+                        Text(
+                            text =
+                                nomesMeses[
+                                    mesSelecionado - 1
+                                ]
+                        )
+                    }
+
+
+                    Button(
+                        onClick = {
+                            mostrarSelecaoAno = true
+                        },
+                        modifier =
+                            Modifier.weight(1f)
+                    ) {
+
+                        Text(
+                            text =
+                                anoSelecionado.toString()
+                        )
+                    }
+                }
+
+                Spacer(
+                    modifier = Modifier.height(24.dp)
+                )
+            }
+
+
+            // =====================================================
+            // SEM FATURA
+            // =====================================================
+
+            if (parcelasDaFatura.isEmpty()) {
+
+                item {
+
+                    Text(
+                        text =
+                            "Nenhuma fatura encontrada para " +
+                                    "${nomesMeses[mesSelecionado - 1]} " +
+                                    "de $anoSelecionado."
+                    )
+
+                    Spacer(
+                        modifier = Modifier.height(24.dp)
+                    )
+                }
+
+            } else {
+
+                // =================================================
+                // FATURAS AGRUPADAS POR CARTÃO
+                // =================================================
+
+                faturasPorCartao.forEach {
+                        (_, parcelasCartao) ->
+
+                    val primeiraParcela =
+                        parcelasCartao.first()
+
+                    val cartaoId =
+                        primeiraParcela.cartaoId
+
+                    val cartao =
+                            cartoes.find { item -> item.id == cartaoId }
+
+                    val pagamentosDoCartao =
+                        pagamentos.filter { pagamento ->
+                            pagamento.cartaoId == cartaoId &&
+                                    pagamento.mesFatura == mesSelecionado &&
+                                    pagamento.anoFatura == anoSelecionado
+                        }
+
+                    val totalFatura =
+                        parcelasCartao
+                            .sumOf { parcela ->
+                                parcela.valor
+                            }
+
+                    val totalPago =
+                        pagamentosDoCartao
+                            .sumOf { pagamento ->
+                                pagamento.valorPago
+                            }
+
+                    val restante =
+                        (totalFatura - totalPago)
+                            .coerceAtLeast(0.0)
+
+                    val fechamento =
+                        cartao?.let {
+                            criarDataFatura(
+                                dia = it.diaFechamento,
+                                mes = mesSelecionado,
+                                ano = anoSelecionado
+                            )
+                        }
+
+                    val vencimento =
+                        cartao?.let {
+                            calcularVencimentoFatura(
+                                mesFatura = mesSelecionado,
+                                anoFatura = anoSelecionado,
+                                diaFechamento = it.diaFechamento,
+                                diaVencimento = it.diaVencimento
+                            )
+                        }
+
+                    val statusFatura =
+                        if (cartao != null) {
+                            calcularStatusFatura(
+                                restante = restante,
+                                mesFatura = mesSelecionado,
+                                anoFatura = anoSelecionado,
+                                diaFechamento = cartao.diaFechamento,
+                                diaVencimento = cartao.diaVencimento
+                            )
+                        } else { "Indisponível"}
+
+
+                    // =============================================
+                    // CABEÇALHO DA FATURA
+                    // =============================================
+
+                    item {
+
+                        Card(
+                            modifier =
+                                Modifier
+                                    .fillMaxWidth()
+                                    .padding(
+                                        vertical = 8.dp
+                                    )
+                        ) {
+
+                            Column(
+                                modifier =
+                                    Modifier.padding(16.dp)
+                            ) {
+
+                                Text(
+                                    text = primeiraParcela.cartaoNome,
+                                    fontSize = 20.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+
+                                Spacer(
+                                    modifier = Modifier.height(4.dp)
+                                )
+
+                                Text(
+                                    text = statusFatura,
+                                    fontWeight = FontWeight.Bold
+                                )
+
+                                Spacer(
+                                    modifier = Modifier.height(8.dp)
+                                )
+
+                                if( fechamento != null &&
+                                    vencimento != null
+                                ) {
+                                    Text(
+                                        text = "Fechamento: ${formatarDataCalendario(fechamento)}",
+                                        fontSize = 13.sp
+                                    )
+
+                                    Text(
+                                        text = "Vencimento: ${formatarDataCalendario(vencimento)}",
+                                        fontSize = 13.sp
+                                    )
+                                }
+
+                                Text(
+                                    text = "Total da fatura: " + formatarDinheiro(totalFatura)
+                                )
+
+                                Spacer(
+                                    modifier =
+                                        Modifier.height(6.dp)
+                                )
+
+                                Text(
+                                    text =
+                                        "Total da fatura: " +
+                                                formatarDinheiro(
+                                                    totalFatura
+                                                ),
+
+                                    fontWeight =
+                                        FontWeight.Bold
+                                )
+
+                                Spacer(
+                                    modifier =
+                                        Modifier.height(4.dp)
+                                )
+
+                                Text(
+                                    text =
+                                        "Pago: ${
+                                            formatarDinheiro(
+                                                totalPago
+                                            )
+                                        }"
+                                )
+
+                                Text(
+                                    text =
+                                        "Em aberto: ${
+                                            formatarDinheiro(
+                                                restante
+                                            )
+                                        }",
+
+                                    fontWeight =
+                                        FontWeight.Bold
+                                )
+
+
+                                if (restante > 0.0) {
+
+                                    Spacer(
+                                        modifier =
+                                            Modifier.height(
+                                                12.dp
+                                            )
+                                    )
+
+                                    Button(
+                                        onClick = {
+
+                                            cartaoParaPagamento =
+                                                cartaoId
+
+                                            nomeCartaoParaPagamento =
+                                                primeiraParcela
+                                                    .cartaoNome
+
+                                            valorRestantePagamento =
+                                                restante
+
+                                            valorPagamento =
+                                                String.format(
+                                                    Locale.getDefault(),
+                                                    "%.2f",
+                                                    restante
+                                                )
+                                                    .replace(
+                                                        ".",
+                                                        ","
+                                                    )
+
+                                            contaPagamento =
+                                                contas.firstOrNull()
+
+                                            mensagemPagamento =
+                                                ""
+                                        },
+
+                                        modifier =
+                                            Modifier
+                                                .fillMaxWidth()
+                                    ) {
+
+                                        Text(
+                                            "Pagar fatura"
+                                        )
+                                    }
+                                } else {
+
+                                    Spacer(
+                                        modifier =
+                                            Modifier.height(
+                                                8.dp
+                                            )
+                                    )
+
+                                    Text(
+                                        text = "Fatura paga",
+                                        fontWeight =
+                                            FontWeight.Bold
+                                    )
+                                }
+                                if (pagamentosDoCartao.isNotEmpty()) {
+                                    Spacer(
+                                        modifier = Modifier.height(16.dp)
+                                    )
+                                    Text(
+                                        text = "Pagamentos",
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Spacer(
+                                        modifier = Modifier.height(8.dp)
+                                    )
+                                    pagamentosDoCartao
+                                        .forEach { pagamento ->
+                                            Card(modifier = Modifier
+                                                                .fillMaxWidth()
+                                                                .padding(vertical = 4.dp)
+                                                                .clickable {
+                                                                    pagamentoParaExcluir = pagamento}
+                                                ) { Column (
+                                                    modifier = Modifier.padding(12.dp)
+                                                ) { Row(
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                    horizontalArrangement = Arrangement.SpaceBetween
+                                                ) { Text(
+                                                    text = pagamento.dataPagamento
+                                                )
+                                                Text(
+                                                    text = formatarDinheiro(
+                                                        pagamento.valorPago
+                                                    ),
+                                                    fontWeight = FontWeight.Bold
+                                                    )
+                                                }
+                                                Spacer(
+                                                    modifier = Modifier.height(4.dp)
+                                                )
+                                                Text(
+                                                    text = pagamento.contaNome,
+                                                    fontSize = 13.sp
+                                                    )
+                                                }
+                                            }
+                                        }
+                                }
+                            }
+                        }
+
+                        Spacer(
+                            modifier =
+                                Modifier.height(4.dp)
+                        )
+                    }
+
+
+                    // =============================================
+                    // PARCELAS DA FATURA
+                    // =============================================
+
+                    items(
+                        items = parcelasCartao,
+                        key = { parcela ->
+                            parcela.id
+                        }
+                    ) { parcela ->
+
+                        Card(
+                            modifier =
+                                Modifier
+                                    .fillMaxWidth()
+                                    .padding(
+                                        vertical = 4.dp
+                                    )
+                        ) {
+
+                            Row(
+                                modifier =
+                                    Modifier
+                                        .fillMaxWidth()
+                                        .padding(16.dp),
+
+                                horizontalArrangement =
+                                    Arrangement
+                                        .SpaceBetween
+                            ) {
+
+                                Column {
+
+                                    Text(
+                                        text =
+                                            parcela.descricao,
+
+                                        fontWeight =
+                                            FontWeight.Bold
+                                    )
+
+                                    Spacer(
+                                        modifier =
+                                            Modifier.height(
+                                                4.dp
+                                            )
+                                    )
+
+                                    Text(
+                                        text =
+                                            "${parcela.numeroParcela}/" +
+                                                    parcela.totalParcelas,
+
+                                        fontSize =
+                                            13.sp
+                                    )
+                                }
+
+
+                                Text(
+                                    text =
+                                        formatarDinheiro(
+                                            parcela.valor
+                                        ),
+
+                                    fontWeight =
+                                        FontWeight.Bold
+                                )
+                            }
+                        }
+                    }
+
+
+                    item {
+
+                        Spacer(
+                            modifier =
+                                Modifier.height(20.dp)
+                        )
+                    }
+                }
+            }
+
+
+            item {
+
+                Spacer(
+                    modifier =
+                        Modifier.height(40.dp)
+                )
+            }
+        }
+
+
+        // =========================================================
+        // POPUP - SELECIONAR MÊS
+        // =========================================================
+
+        if (mostrarSelecaoMes) {
+
+            AlertDialog(
+                onDismissRequest = {
+                    mostrarSelecaoMes = false
+                },
+
+                title = {
+                    Text("Selecionar mês")
+                },
+
+                text = {
+
+                    LazyColumn {
+
+                        items(
+                            items =
+                                nomesMeses
+                                    .mapIndexed {
+                                            indice,
+                                            nome ->
+
+                                        (indice + 1) to nome
+                                    }
+                        ) { mes ->
+
+                            Button(
+                                onClick = {
+
+                                    mesSelecionado =
+                                        mes.first
+
+                                    mostrarSelecaoMes =
+                                        false
+                                },
+
+                                modifier =
+                                    Modifier
+                                        .fillMaxWidth()
+                            ) {
+
+                                Text(
+                                    text = mes.second
+                                )
+                            }
+
+                            Spacer(
+                                modifier =
+                                    Modifier.height(6.dp)
+                            )
+                        }
+                    }
+                },
+
+                confirmButton = {},
+
+                dismissButton = {
+
+                    TextButton(
+                        onClick = {
+                            mostrarSelecaoMes =
+                                false
+                        }
+                    ) {
+
+                        Text("Cancelar")
+                    }
+                }
+            )
+        }
+
+
+        // =========================================================
+        // POPUP - SELECIONAR ANO
+        // =========================================================
+
+        if (mostrarSelecaoAno) {
+
+            AlertDialog(
+                onDismissRequest = {
+                    mostrarSelecaoAno = false
+                },
+
+                title = {
+                    Text("Selecionar ano")
+                },
+
+                text = {
+
+                    Column {
+
+                        anosDisponiveis
+                            .forEach { ano ->
+
+                                Button(
+                                    onClick = {
+
+                                        anoSelecionado =
+                                            ano
+
+                                        mostrarSelecaoAno =
+                                            false
+                                    },
+
+                                    modifier =
+                                        Modifier
+                                            .fillMaxWidth()
+                                ) {
+
+                                    Text(
+                                        text =
+                                            ano.toString()
+                                    )
+                                }
+
+                                Spacer(
+                                    modifier =
+                                        Modifier.height(6.dp)
+                                )
+                            }
+                    }
+                },
+
+                confirmButton = {},
+
+                dismissButton = {
+
+                    TextButton(
+                        onClick = {
+                            mostrarSelecaoAno =
+                                false
+                        }
+                    ) {
+
+                        Text("Cancelar")
+                    }
+                }
+            )
+        }
+
+
+        // =========================================================
+        // POPUP - PAGAR FATURA
+        // =========================================================
+
+        if (cartaoParaPagamento != null) {
+
+            AlertDialog(
+                onDismissRequest = {
+
+                    cartaoParaPagamento =
+                        null
+
+                    mensagemPagamento =
+                        ""
+                },
+
+                title = {
+
+                    Text(
+                        text =
+                            "Pagar $nomeCartaoParaPagamento"
+                    )
+                },
+
+                text = {
+
+                    Column {
+
+                        Text(
+                            text =
+                                "Em aberto: " +
+                                        formatarDinheiro(
+                                            valorRestantePagamento
+                                        ),
+
+                            fontWeight =
+                                FontWeight.Bold
+                        )
+
+                        Spacer(
+                            modifier =
+                                Modifier.height(12.dp)
+                        )
+
+
+                        OutlinedTextField(
+                            value =
+                                valorPagamento,
+
+                            onValueChange = {
+                                valorPagamento = it
+                                mensagemPagamento = ""
+                            },
+
+                            label = {
+                                Text(
+                                    "Valor do pagamento"
+                                )
+                            },
+
+                            modifier =
+                                Modifier.fillMaxWidth()
+                        )
+
+
+                        Spacer(
+                            modifier =
+                                Modifier.height(12.dp)
+                        )
+
+
+                        Button(
+                            onClick = {
+                                mostrarSelecaoContaPagamento =
+                                    true
+                            },
+
+                            modifier =
+                                Modifier.fillMaxWidth()
+                        ) {
+
+                            Text(
+                                text =
+                                    "Conta: ${
+                                        contaPagamento
+                                            ?.nome
+                                            ?: "Selecione"
+                                    }"
+                            )
+                        }
+
+
+                        Spacer(
+                            modifier =
+                                Modifier.height(12.dp)
+                        )
+
+
+                        Button(
+                            onClick = {
+                                mostrarCalendarioPagamento =
+                                    true
+                            },
+
+                            modifier =
+                                Modifier.fillMaxWidth()
+                        ) {
+
+                            Text(
+                                text =
+                                    "Data: $dataPagamento"
+                            )
+                        }
+
+
+                        if (
+                            mensagemPagamento
+                                .isNotBlank()
+                        ) {
+
+                            Spacer(
+                                modifier =
+                                    Modifier.height(8.dp)
+                            )
+
+                            Text(
+                                text =
+                                    mensagemPagamento
+                            )
+                        }
+                    }
+                },
+
+                confirmButton = {
+
+                    TextButton(
+                        onClick = {
+
+                            val valorConvertido =
+                                valorPagamento
+                                    .replace(".", "")
+                                    .replace(",", ".")
+                                    .toDoubleOrNull()
+
+                            val cartaoId =
+                                cartaoParaPagamento
+
+                            val conta =
+                                contaPagamento
+
+
+                            if (
+                                valorConvertido == null ||
+                                valorConvertido <= 0
+                            ) {
+
+                                mensagemPagamento =
+                                    "Digite um valor válido."
+
+                            } else if (
+                                valorConvertido >
+                                valorRestantePagamento
+                            ) {
+
+                                mensagemPagamento =
+                                    "O pagamento não pode ser maior que o valor restante."
+
+                            } else if (
+                                conta == null
+                            ) {
+
+                                mensagemPagamento =
+                                    "Selecione uma conta."
+
+                            } else if (
+                                cartaoId != null
+                            ) {
+
+                                onPagar(
+                                    cartaoId,
+                                    conta.id,
+                                    mesSelecionado,
+                                    anoSelecionado,
+                                    valorConvertido,
+                                    dataPagamento
+                                )
+
+                                cartaoParaPagamento =
+                                    null
+
+                                mensagemPagamento =
+                                    ""
+                            }
+                        }
+                    ) {
+
+                        Text("Confirmar")
+                    }
+                },
+
+                dismissButton = {
+
+                    TextButton(
+                        onClick = {
+
+                            cartaoParaPagamento =
+                                null
+
+                            mensagemPagamento =
+                                ""
+                        }
+                    ) {
+
+                        Text("Cancelar")
+                    }
+                }
+            )
+        }
+
+
+        // =========================================================
+        // POPUP - CONTA DO PAGAMENTO
+        // =========================================================
+
+        if (mostrarSelecaoContaPagamento) {
+
+            AlertDialog(
+                onDismissRequest = {
+                    mostrarSelecaoContaPagamento =
+                        false
+                },
+
+                title = {
+                    Text("Conta do pagamento")
+                },
+
+                text = {
+
+                    Column {
+
+                        if (contas.isEmpty()) {
+
+                            Text(
+                                "Nenhuma conta disponível."
+                            )
+
+                        } else {
+
+                            contas.forEach { conta ->
+
+                                Button(
+                                    onClick = {
+
+                                        contaPagamento =
+                                            conta
+
+                                        mostrarSelecaoContaPagamento =
+                                            false
+                                    },
+
+                                    modifier =
+                                        Modifier
+                                            .fillMaxWidth()
+                                ) {
+
+                                    Text(conta.nome)
+                                }
+
+                                Spacer(
+                                    modifier =
+                                        Modifier.height(
+                                            6.dp
+                                        )
+                                )
+                            }
+                        }
+                    }
+                },
+
+                confirmButton = {},
+
+                dismissButton = {
+
+                    TextButton(
+                        onClick = {
+                            mostrarSelecaoContaPagamento =
+                                false
+                        }
+                    ) {
+
+                        Text("Cancelar")
+                    }
+                }
+            )
+        }
+
+        pagamentoParaExcluir?.let {pagamento ->
+            AlertDialog(
+                onDismissRequest = {
+                    pagamentoParaExcluir = null
+                },
+                title = {
+                    Text(
+                        "Excluir pagamento?"
+                    )
+                },
+                text = {
+                    Column {
+                        Text(
+                            text = "Pagamento de ${formatarDinheiro(pagamento.valorPago)}"
+                        )
+                        Spacer(
+                            modifier = Modifier.height(6.dp)
+                        )
+                        Text(
+                            text = "Conta: ${pagamento.contaNome}"
+                        )
+                        Text(
+                            text = "data: ${pagamento.dataPagamento}"
+                        )
+                        Spacer(
+                            modifier = Modifier.height(12.dp)
+                        )
+                        Text(
+                            text = "O valor voltará a ficar em aberto na fatura."
+                        )
+                    }
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            onExcluirPagamento(pagamento)
+                            pagamentoParaExcluir = null
+                        }
+                    ) {
+                        Text("Excluir")
+                    }
+                },
+                dismissButton = {
+                    TextButton(
+                        onClick = {
+                            pagamentoParaExcluir = null
+                        }
+                    ) {
+                        Text("Cancelar")
+                    }
+                }
+            )
+        }
+
+
+        // =========================================================
+        // CALENDÁRIO - PAGAMENTO
+        // =========================================================
+
+        if (mostrarCalendarioPagamento) {
+
+            val datePickerState =
+                rememberDatePickerState()
+
+            DatePickerDialog(
+                onDismissRequest = {
+                    mostrarCalendarioPagamento =
+                        false
+                },
+
+                confirmButton = {
+
+                    TextButton(
+                        onClick = {
+
+                            datePickerState
+                                .selectedDateMillis
+                                ?.let { millis ->
+
+                                    val calendarioUtc =
+                                        java.util.Calendar
+                                            .getInstance(
+                                                java.util.TimeZone
+                                                    .getTimeZone(
+                                                        "UTC"
+                                                    )
+                                            )
+
+                                    calendarioUtc
+                                        .timeInMillis =
+                                        millis
+
+
+                                    val dia =
+                                        calendarioUtc.get(
+                                            java.util.Calendar
+                                                .DAY_OF_MONTH
+                                        )
+
+                                    val mes =
+                                        calendarioUtc.get(
+                                            java.util.Calendar
+                                                .MONTH
+                                        ) + 1
+
+                                    val ano =
+                                        calendarioUtc.get(
+                                            java.util.Calendar
+                                                .YEAR
+                                        )
+
+
+                                    dataPagamento =
+                                        String.format(
+                                            Locale.getDefault(),
+                                            "%02d/%02d/%04d",
+                                            dia,
+                                            mes,
+                                            ano
+                                        )
+                                }
+
+                            mostrarCalendarioPagamento =
+                                false
+                        }
+                    ) {
+
+                        Text("OK")
+                    }
+                },
+
+                dismissButton = {
+
+                    TextButton(
+                        onClick = {
+                            mostrarCalendarioPagamento =
+                                false
+                        }
+                    ) {
+
+                        Text("Cancelar")
+                    }
+                }
+            ) {
+
+                DatePicker(
+                    state = datePickerState
+                )
+            }
+        }
+    }
+}
+
 fun gerarParcelasCartao(
     movimentacaoId: Int,
     cartaoId: Int,
@@ -4968,10 +6494,6 @@ fun gerarParcelasCartao(
     var anoPrimeiraFatura =
         anoCompra
 
-
-    // Compra depois do fechamento:
-    // vai para a fatura seguinte.
-
     if (diaCompra > diaFechamento) {
 
         mesPrimeiraFatura++
@@ -4983,32 +6505,39 @@ fun gerarParcelasCartao(
         }
     }
 
+    val valorTotalCentavos =
+        kotlin.math.round(
+            valorTotal * 100
+        ).toLong()
+    val valorBaseCentavos =
+        valorTotalCentavos / quantidadeParcelas
+    val restoCentavos =
+        valorTotalCentavos % quantidadeParcelas
 
-    val valorBase =
-        valorTotal / quantidadeParcelas
-
-
-    return (1..quantidadeParcelas).map { numero ->
-
+    return(1..quantidadeParcelas).map { numero ->
         var mes =
             mesPrimeiraFatura + numero - 1
-
         var ano =
             anoPrimeiraFatura
 
-
-        while (mes > 12) {
+        while (mes>12) {
             mes -= 12
             ano++
         }
 
+        val valorParcelaCentavos =
+            if (numero == quantidadeParcelas) {
+                valorBaseCentavos + restoCentavos
+    } else {
+        valorBaseCentavos
+            }
 
         ParcelaCartaoEntity(
             movimentacaoId = movimentacaoId,
             cartaoId = cartaoId,
             numeroParcela = numero,
             totalParcelas = quantidadeParcelas,
-            valor = valorBase,
+            valor = valorParcelaCentavos / 100.00,
             mesFatura = mes,
             anoFatura = ano
         )
@@ -5025,4 +6554,102 @@ fun formatarDinheiro(valor: Double): String {
                 )
             )
     return formato.format(valor)
+}
+fun criarDataFatura(
+    dia: Int,
+    mes: Int,
+    ano: Int
+): java.util.Calendar {
+
+    val calendario = java.util.Calendar.getInstance()
+    calendario.clear()
+    calendario.set( java.util.Calendar.YEAR, ano)
+    calendario.set( java.util.Calendar.MONTH, mes - 1)
+
+    val ultimoDiaDoMes = calendario.getActualMaximum( java.util.Calendar.DAY_OF_MONTH)
+    calendario.set( java.util.Calendar.DAY_OF_MONTH, dia.coerceAtMost(ultimoDiaDoMes))
+
+    return calendario
+
+}
+
+fun calcularVencimentoFatura(
+        mesFatura: Int,
+        anoFatura: Int,
+        diaFechamento: Int,
+        diaVencimento: Int
+): java.util.Calendar {
+    var mesVencimento = mesFatura
+    var anoVencimento = anoFatura
+
+    if (diaVencimento <= diaFechamento) {
+        mesVencimento++
+        if (mesVencimento > 12) {
+            mesVencimento = 1
+            anoVencimento++
+        }
+    }
+
+    return criarDataFatura(
+        dia = diaVencimento,
+        mes = mesVencimento,
+        ano = anoVencimento
+    )
+}
+
+fun formatarDataCalendario(
+    calendario: java.util.Calendar
+): String {
+    return String.format(
+        Locale.getDefault(),
+        "%02d/%02d/%04d",
+
+        calendario.get(
+            java.util.Calendar.DAY_OF_MONTH
+        ),
+        calendario.get(
+            java.util.Calendar.MONTH
+        ) + 1,
+        calendario.get(
+            java.util.Calendar.YEAR
+        )
+    )
+}
+
+fun calcularStatusFatura(
+    restante: Double,
+    mesFatura: Int,
+    anoFatura: Int,
+    diaFechamento: Int,
+    diaVencimento: Int
+): String {
+    if (restante < 0.01) {
+        return "Paga"
+    }
+
+    val hoje = java.util.Calendar.getInstance()
+    hoje.set( java.util.Calendar.HOUR_OF_DAY, 0)
+    hoje.set( java.util.Calendar.MINUTE, 0)
+    hoje.set( java.util.Calendar.SECOND, 0)
+    hoje.set( java.util.Calendar.MILLISECOND, 0)
+
+    val fechamento =
+        criarDataFatura(
+            dia = diaFechamento,
+            mes = mesFatura,
+            ano = anoFatura
+        )
+
+    val vencimento =
+        calcularVencimentoFatura(
+            mesFatura = mesFatura,
+            anoFatura = anoFatura,
+            diaFechamento = diaFechamento,
+            diaVencimento = diaVencimento
+        )
+    return when {
+        hoje.after(vencimento) -> "Vencida"
+        hoje.before(fechamento) -> "Aberta"
+        else -> "Fechada"
+    }
 }

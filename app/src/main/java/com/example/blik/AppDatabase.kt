@@ -9,9 +9,10 @@ import androidx.room.RoomDatabase
         ContaEntity::class,
         CategoriaEntity::class,
         CartaoEntity::class,
-        ParcelaCartaoEntity::class
+        ParcelaCartaoEntity::class,
+        PagamentoFaturaEntity::class
     ],
-    version = 11,
+    version = 12,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -20,4 +21,5 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun categoriaDao(): CategoriaDao
     abstract fun cartaoDao(): CartaoDao
     abstract fun parcelaCartaoDao(): ParcelaCartaoDao
+    abstract fun pagamentoFaturaDao(): PagamentoFaturaDao
 }
