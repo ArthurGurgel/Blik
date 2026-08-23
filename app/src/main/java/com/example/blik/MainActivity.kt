@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.clickable
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -72,6 +73,7 @@ data class Movimentacao(
     val cartaoId: Int? = null,
     val cartaoNome: String? = null,
     val quantidadeParcelas: Int = 1,
+    val parcelaAtual: Int = 1,
     val data: String
 )
 
@@ -107,7 +109,6 @@ fun AppFinanceiro() {
             AppDatabase::class.java,
             "blik.db"
         )
-            .fallbackToDestructiveMigration(true)
             .build()
     }
 
@@ -256,11 +257,11 @@ fun AppFinanceiro() {
 
                 onAdicionar ={
                     nome,
-                        limite,
-                        diaFechamento,
-                        diaVencimento,
-                        contaId,
-                        resultado ->
+                    limite,
+                    diaFechamento,
+                    diaVencimento,
+                    contaId,
+                    resultado ->
                     scope.launch {
                         val nomeLimpo = nome.trim()
                         val existe =
@@ -510,23 +511,13 @@ fun AppFinanceiro() {
 
                                 val parcelas =
                                     gerarParcelasCartao(
-                                        movimentacaoId =
-                                            idMovimentacao.toInt(),
-
-                                        cartaoId =
-                                            cartaoId,
-
-                                        valorTotal =
-                                            novaMovimentacao.valor,
-
-                                        quantidadeParcelas =
-                                            novaMovimentacao.quantidadeParcelas,
-
-                                        dataCompra =
-                                            novaMovimentacao.data,
-
-                                        diaFechamento =
-                                            cartao.diaFechamento
+                                        movimentacaoId = idMovimentacao.toInt(),
+                                        cartaoId = cartaoId,
+                                        valorTotal = novaMovimentacao.valor,
+                                        quantidadeParcelas = novaMovimentacao.quantidadeParcelas,
+                                        parcelaAtual = novaMovimentacao.parcelaAtual,
+                                        dataCompra = novaMovimentacao.data,
+                                        diaFechamento = cartao.diaFechamento
                                     )
 
                                 parcelaCartaoDao
@@ -593,7 +584,8 @@ fun AppFinanceiro() {
                                         valorTotal = movimentacao.valor,
                                         quantidadeParcelas = movimentacao.quantidadeParcelas,
                                         dataCompra = movimentacao.data,
-                                        diaFechamento = cartao.diaFechamento
+                                        diaFechamento = cartao.diaFechamento,
+                                        parcelaAtual = movimentacao.parcelaAtual
                                     )
                                 parcelaCartaoDao.inserirTodas(
                                     parcelas
@@ -766,10 +758,12 @@ fun TelaInicial(
 
     val anoAtualInt = anoAtual.toInt()
 
-    val parcelasFaturaAtual = parcelasCartao
-        .filter { parcela ->
+    val parcelasFaturaAtual =
+        parcelasCartao.filter { parcela ->
+
             parcela.mesFatura == mesAtualInt &&
-            parcela.anoFatura == anoAtualInt
+            parcela.anoFatura == anoAtualInt &&
+            !parcela.quitadaAnteriormente
         }
 
     val faturasAtuais = parcelasFaturaAtual
@@ -1095,102 +1089,146 @@ fun TelaInicial(
                 )
             },
 
+            floatingActionButton = {
+                androidx.compose.material3.FloatingActionButton(
+                    onClick = onNovaMovimentacao
+                ) {
+                    Text(
+                        text = "+",
+                        fontSize = 26.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            },
+
             containerColor =
                 MaterialTheme.colorScheme.background
 
         ) { innerPadding ->
 
-            Column(
+           LazyColumn(
                 modifier = Modifier
                     .padding(innerPadding)
-                    .padding(20.dp)
-                    .fillMaxSize()
-            ) {
+                    .fillMaxSize(),
 
-                Card(
-                    modifier = Modifier.fillMaxWidth()
-                ) {
+               contentPadding = androidx.compose.foundation.layout.PaddingValues (
+                   start = 20.dp,
+                   end = 20.dp,
+                   top = 20.dp,
+                   bottom = 100.dp
+               )
+           ) {
+               item {
+                   Card(
+                       modifier = Modifier.fillMaxWidth()
+                   ) {
 
-                    Column(
-                        modifier = Modifier.padding(20.dp)
-                    ) {
+                       Column(
+                           modifier = Modifier.padding(20.dp)
+                       ) {
 
-                        Text(
-                            text = "Saldo atual",
-                            fontSize = 16.sp
-                        )
+                           Text(
+                               text = "Saldo total",
+                               fontSize = 14.sp
+                           )
 
-                        Text(
-                            text = formatarDinheiro(saldoAtual),
-                            fontSize = 30.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-                }
+                           Spacer(
+                               modifier = Modifier.height(4.dp)
+                           )
 
-                Spacer(
-                    modifier = Modifier.height(20.dp)
-                )
+                           Text(
+                               text = formatarDinheiro(saldoAtual),
+                               fontSize = 30.sp,
+                               fontWeight = FontWeight.Bold
+                           )
 
-                Text(
-                    text = periodoAtual,
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Bold
-                )
+                           Spacer(
+                               modifier = Modifier.height(18.dp)
+                           )
 
-                Spacer(
-                    modifier = Modifier.height(12.dp)
-                )
+                           Row(
+                               modifier = Modifier.fillMaxWidth(),
+                               horizontalArrangement = Arrangement.SpaceBetween,
+                               verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+                           ) {
+                               Column(
+                                   modifier = Modifier.weight(1f)
+                               ) {
+                                   Text(
+                                       text = "Entradas",
+                                       fontSize = 12.sp
+                                   )
 
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement =
-                        Arrangement.SpaceBetween
-                ) {
+                                   Text(
+                                       text = formatarDinheiro(entradasDoMes),
+                                       fontWeight = FontWeight.Bold,
+                                       fontSize = 17.sp
+                                   )
+                               }
 
-                    Column {
+                               Column(
+                                   modifier = Modifier.weight(1f),
+                                   horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally
+                               ) {
+                                   Text(
+                                       text = periodoAtual,
+                                       fontSize = 13.sp,
+                                       fontWeight = FontWeight.Medium,
+                                   )
+                                   Text(
+                                       text = "-",
+                                       fontSize = 16.sp,
+                                   )
+                               }
 
-                        Text("Entradas")
+                               Column(
+                                   modifier = Modifier.weight(1f),
+                                   horizontalAlignment = androidx.compose.ui.Alignment.End
+                               ) {
+                                   Text(
+                                       text = "Saídas",
+                                       fontSize = 12.sp
+                                   )
 
-                        Text(
-                            text = formatarDinheiro(entradasDoMes),
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
+                                   Text(
+                                       text = formatarDinheiro(saidasDoMes),
+                                       fontWeight = FontWeight.Bold,
+                                       fontSize = 17.sp
+                                   )
+                               }
+                           }
+                       }
+                   }
 
-                    Column {
+                   Spacer(
+                       modifier = Modifier.height(24.dp)
+                   )
 
-                        Text("Saídas")
+                   Text(
+                       text = "Contas",
+                       fontSize = 22.sp,
+                       fontWeight = FontWeight.Bold
+                   )
 
-                        Text(
-                            text = formatarDinheiro(saidasDoMes),
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-                }
-
-                Spacer(
-                    modifier = Modifier.height(28.dp)
-                )
-
-                Text(
-                    text = "Contas",
-                    fontSize = 22.sp,
-                    fontWeight = FontWeight.Bold
-                )
-
-                Spacer(
-                    modifier = Modifier.height(12.dp)
-                )
+                   Spacer(
+                       modifier = Modifier.height(12.dp)
+                   )
+               }
 
                 if (contas.isEmpty()) {
-                    Text(
-                        text = "Nenhuma conta cadastrada."
-                    )
+                    item {
+                        Text(
+                            text = "Nenhuma conta cadastrada."
+                        )
+                    }
                 } else {
-                    contas.forEach { conta ->
-                        val saldo: Double =
-                            saldosPorConta[conta] ?: 0.0
+                    items(
+                        items = contas,
+                        key = { conta ->
+                            conta.id
+                        }
+                    ) { conta ->
+                        val saldo = saldosPorConta[conta] ?: 0.0
 
                         ContaItem(
                             nome = conta.nome,
@@ -1198,27 +1236,33 @@ fun TelaInicial(
                         )
                     }
                 }
+                item {
 
-                Spacer(
-                    modifier = Modifier.height(24.dp)
-                )
+                    Spacer(
+                        modifier = Modifier.height(24.dp)
+                    )
 
-                Text(
-                    text = "Faturas",
-                    fontSize = 22.sp,
-                    fontWeight = FontWeight.Bold
-                )
+                    Text(
+                        text = "Faturas",
+                        fontSize = 22.sp,
+                        fontWeight = FontWeight.Bold
+                    )
 
-                Spacer(
-                    modifier = Modifier.height(12.dp)
-                )
+                    Spacer(
+                        modifier = Modifier.height(12.dp)
+                    )
+                }
 
                 if (faturasAtuais.isEmpty()) {
-                    Text(
-                        text = "Nenhuma fatura em aberto neste mês."
-                    )
+                    item {
+                        Text(
+                            text = "Nenhuma fatura em aberto neste mês."
+                        )
+                    }
                 } else {
-                    faturasAtuais.forEach { fatura ->
+                    items(
+                        items = faturasAtuais
+                    ) { fatura ->
                         Card(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -1245,7 +1289,7 @@ fun TelaInicial(
                                     )
                                 }
                                 Spacer(
-                                    modifier = Modifier.height(8.dp)
+                                    modifier = Modifier.height(12.dp)
                                 )
 
                                 Row(
@@ -1298,16 +1342,11 @@ fun TelaInicial(
                     }
                 }
 
-                Spacer(
-                    modifier = Modifier.height(24.dp)
-                )
-
-                Button(
-                    onClick = onNovaMovimentacao,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text("+ Nova movimentação")
-                }
+               item {
+                   Spacer(
+                       modifier = Modifier.height(20.dp)
+                   )
+               }
             }
         }
     }
@@ -1379,6 +1418,10 @@ fun TelaNovaMovimentacao(
         )
     }
 
+    var parcelaAtual by remember {
+        mutableStateOf("1")
+    }
+
     var data by remember {
         mutableStateOf(
             movimentacaoParaEditar?.data
@@ -1420,6 +1463,10 @@ fun TelaNovaMovimentacao(
     }
 
     var mostrarSelecaoParcelas by remember {
+        mutableStateOf(false)
+    }
+
+    var mostrarSelecaoParcelaAtual by remember {
         mutableStateOf(false)
     }
 
@@ -1696,6 +1743,23 @@ fun TelaNovaMovimentacao(
                                     "Parcelas: ${quantidadeParcelas}x"
                             )
                         }
+
+                        Spacer(
+                            modifier = Modifier.height(12.dp)
+                        )
+
+                        Button(
+                            onClick = {
+                                mostrarSelecaoParcelaAtual = true
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+
+                            Text(
+                                text =
+                                    "Parcela atual: $parcelaAtual/$quantidadeParcelas"
+                            )
+                        }
                     }
 
 
@@ -1827,6 +1891,11 @@ fun TelaNovaMovimentacao(
 
                             val parcelasConvertidas =
                                 quantidadeParcelas
+                                    .toIntOrNull()
+                                    ?: 1
+
+                            val parcelaAtualConvertida =
+                                parcelaAtual
                                     .toIntOrNull()
                                     ?: 1
 
@@ -2028,8 +2097,17 @@ fun TelaNovaMovimentacao(
                                                 1
                                             },
 
-                                        data =
-                                            data
+                                        parcelaAtual =
+                                            if (
+                                                tipo == "Saída" &&
+                                                formaPagamento == "Crédito"
+                                            ) {
+                                                parcelaAtualConvertida
+                                            } else {
+                                                1
+                                            },
+
+                                        data = data
                                     )
 
                                 onSalvar(movimentacao)
@@ -2107,6 +2185,8 @@ fun TelaNovaMovimentacao(
                                 contaDestinoSelecionada = null
 
                                 quantidadeParcelas = "1"
+
+                                parcelaAtual = "1"
 
                                 mostrarSelecaoTipo = false
                             },
@@ -2525,6 +2605,15 @@ fun TelaNovaMovimentacao(
                                     quantidadeParcelas =
                                         numero.toString()
 
+                                    val atual =
+                                        parcelaAtual.toIntOrNull()
+                                            ?: 1
+
+                                    if (atual > numero) {
+                                        parcelaAtual =
+                                            numero.toString()
+                                    }
+
                                     mostrarSelecaoParcelas =
                                         false
                                 },
@@ -2557,6 +2646,81 @@ fun TelaNovaMovimentacao(
                     TextButton(
                         onClick = {
                             mostrarSelecaoParcelas = false
+                        }
+                    ) {
+                        Text("Cancelar")
+                    }
+                }
+            )
+        }
+
+        // =====================================================
+        // POPUP - PARCELA ATUAL
+        // =====================================================
+
+        if (mostrarSelecaoParcelaAtual) {
+
+            val totalParcelas =
+                quantidadeParcelas
+                    .toIntOrNull()
+                    ?: 1
+
+            AlertDialog(
+                onDismissRequest = {
+                    mostrarSelecaoParcelaAtual =
+                        false
+                },
+
+                title = {
+                    Text("Parcela atual")
+                },
+
+                text = {
+
+                    LazyColumn {
+
+                        items(
+                            items =
+                                (1..totalParcelas)
+                                    .toList()
+                        ) { numero ->
+
+                            Button(
+                                onClick = {
+
+                                    parcelaAtual =
+                                        numero.toString()
+
+                                    mostrarSelecaoParcelaAtual =
+                                        false
+                                },
+
+                                modifier =
+                                    Modifier.fillMaxWidth()
+                            ) {
+
+                                Text(
+                                    text =
+                                        "$numero/$totalParcelas"
+                                )
+                            }
+
+                            Spacer(
+                                modifier =
+                                    Modifier.height(6.dp)
+                            )
+                        }
+                    }
+                },
+
+                confirmButton = {},
+
+                dismissButton = {
+
+                    TextButton(
+                        onClick = {
+                            mostrarSelecaoParcelaAtual =
+                                false
                         }
                     ) {
                         Text("Cancelar")
@@ -5355,7 +5519,7 @@ fun TelaFaturas(
         parcelas.filter { parcela ->
 
             parcela.mesFatura == mesSelecionado &&
-                    parcela.anoFatura == anoSelecionado
+            parcela.anoFatura == anoSelecionado
         }
 
 
@@ -5499,15 +5663,20 @@ fun TelaFaturas(
                     val cartao =
                             cartoes.find { item -> item.id == cartaoId }
 
+                    val parcelasEmAberto =
+                        parcelasCartao.filter { parcela ->
+                            !parcela.quitadaAnteriormente
+                        }
+
                     val pagamentosDoCartao =
                         pagamentos.filter { pagamento ->
                             pagamento.cartaoId == cartaoId &&
-                                    pagamento.mesFatura == mesSelecionado &&
-                                    pagamento.anoFatura == anoSelecionado
+                            pagamento.mesFatura == mesSelecionado &&
+                            pagamento.anoFatura == anoSelecionado
                         }
 
                     val totalFatura =
-                        parcelasCartao
+                        parcelasEmAberto
                             .sumOf { parcela ->
                                 parcela.valor
                             }
@@ -6465,8 +6634,19 @@ fun gerarParcelasCartao(
     valorTotal: Double,
     quantidadeParcelas: Int,
     dataCompra: String,
-    diaFechamento: Int
+    diaFechamento: Int,
+    parcelaAtual: Int = 1
 ): List<ParcelaCartaoEntity> {
+
+    if (quantidadeParcelas <= 0) {
+        return emptyList()
+    }
+
+    val parcelaAtualValida =
+        parcelaAtual.coerceIn(
+            1,
+            quantidadeParcelas
+        )
 
     val partes =
         dataCompra.split("/")
@@ -6488,60 +6668,165 @@ fun gerarParcelasCartao(
             ?: return emptyList()
 
 
-    var mesPrimeiraFatura =
-        mesCompra
+    var mesPrimeiraFatura: Int
+    var anoPrimeiraFatura: Int
 
-    var anoPrimeiraFatura =
-        anoCompra
 
-    if (diaCompra > diaFechamento) {
+    if (parcelaAtualValida == 1) {
 
-        mesPrimeiraFatura++
+        // ==========================================
+        // COMPRA NOVA
+        // Mantém exatamente a lógica que já tínhamos
+        // ==========================================
 
-        if (mesPrimeiraFatura > 12) {
+        mesPrimeiraFatura =
+            mesCompra
 
-            mesPrimeiraFatura = 1
-            anoPrimeiraFatura++
+        anoPrimeiraFatura =
+            anoCompra
+
+        if (diaCompra > diaFechamento) {
+
+            mesPrimeiraFatura++
+
+            if (mesPrimeiraFatura > 12) {
+                mesPrimeiraFatura = 1
+                anoPrimeiraFatura++
+            }
+        }
+
+    } else {
+
+        // ==========================================
+        // COMPRA ANTIGA JÁ EM ANDAMENTO
+        // ==========================================
+
+        val hoje =
+            java.util.Calendar.getInstance()
+
+        var mesFaturaAtual =
+            hoje.get(
+                java.util.Calendar.MONTH
+            ) + 1
+
+        var anoFaturaAtual =
+            hoje.get(
+                java.util.Calendar.YEAR
+            )
+
+        /*
+         * A parcela escolhida pelo usuário será
+         * considerada a parcela da fatura atual.
+         *
+         * Exemplo:
+         * parcelaAtual = 7
+         *
+         * Precisamos descobrir em qual mês caiu
+         * a parcela 1.
+         */
+
+        mesPrimeiraFatura =
+            mesFaturaAtual
+
+        anoPrimeiraFatura =
+            anoFaturaAtual
+
+        repeat(
+            parcelaAtualValida - 1
+        ) {
+
+            mesPrimeiraFatura--
+
+            if (mesPrimeiraFatura < 1) {
+
+                mesPrimeiraFatura = 12
+                anoPrimeiraFatura--
+            }
         }
     }
+
+
+    // ==========================================
+    // DIVISÃO DO VALOR EM CENTAVOS
+    // ==========================================
 
     val valorTotalCentavos =
         kotlin.math.round(
             valorTotal * 100
         ).toLong()
+
     val valorBaseCentavos =
-        valorTotalCentavos / quantidadeParcelas
+        valorTotalCentavos /
+                quantidadeParcelas
+
     val restoCentavos =
-        valorTotalCentavos % quantidadeParcelas
+        valorTotalCentavos %
+                quantidadeParcelas
 
-    return(1..quantidadeParcelas).map { numero ->
-        var mes =
-            mesPrimeiraFatura + numero - 1
-        var ano =
-            anoPrimeiraFatura
 
-        while (mes>12) {
-            mes -= 12
-            ano++
-        }
+    // ==========================================
+    // GERA TODAS AS PARCELAS
+    // ==========================================
 
-        val valorParcelaCentavos =
-            if (numero == quantidadeParcelas) {
-                valorBaseCentavos + restoCentavos
-    } else {
-        valorBaseCentavos
+    return (1..quantidadeParcelas)
+        .map { numero ->
+
+            var mes =
+                mesPrimeiraFatura +
+                        numero - 1
+
+            var ano =
+                anoPrimeiraFatura
+
+            while (mes > 12) {
+                mes -= 12
+                ano++
             }
 
-        ParcelaCartaoEntity(
-            movimentacaoId = movimentacaoId,
-            cartaoId = cartaoId,
-            numeroParcela = numero,
-            totalParcelas = quantidadeParcelas,
-            valor = valorParcelaCentavos / 100.00,
-            mesFatura = mes,
-            anoFatura = ano
-        )
-    }
+
+            val valorParcelaCentavos =
+                if (
+                    numero ==
+                    quantidadeParcelas
+                ) {
+
+                    valorBaseCentavos +
+                            restoCentavos
+
+                } else {
+
+                    valorBaseCentavos
+                }
+
+
+            ParcelaCartaoEntity(
+                movimentacaoId =
+                    movimentacaoId,
+
+                cartaoId =
+                    cartaoId,
+
+                numeroParcela =
+                    numero,
+
+                totalParcelas =
+                    quantidadeParcelas,
+
+                valor =
+                    valorParcelaCentavos /
+                            100.0,
+
+                mesFatura =
+                    mes,
+
+                anoFatura =
+                    ano,
+
+                quitadaAnteriormente =
+                    numero <
+                            parcelaAtualValida
+            )
+        }
 }
 
 fun formatarDinheiro(valor: Double): String {
@@ -6628,10 +6913,10 @@ fun calcularStatusFatura(
     }
 
     val hoje = java.util.Calendar.getInstance()
-    hoje.set( java.util.Calendar.HOUR_OF_DAY, 0)
-    hoje.set( java.util.Calendar.MINUTE, 0)
-    hoje.set( java.util.Calendar.SECOND, 0)
-    hoje.set( java.util.Calendar.MILLISECOND, 0)
+    hoje.set(java.util.Calendar.HOUR_OF_DAY, 0)
+    hoje.set(java.util.Calendar.MINUTE, 0)
+    hoje.set(java.util.Calendar.SECOND, 0)
+    hoje.set(java.util.Calendar.MILLISECOND, 0)
 
     val fechamento =
         criarDataFatura(

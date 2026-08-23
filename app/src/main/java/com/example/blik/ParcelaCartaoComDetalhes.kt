@@ -10,5 +10,6 @@ data class ParcelaCartaoComDetalhes(
     val totalParcelas: Int,
     val valor: Double,
     val mesFatura: Int,
-    val anoFatura: Int
+    val anoFatura: Int,
+    val quitadaAnteriormente: Boolean
 )

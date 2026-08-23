@@ -54,5 +54,7 @@ data class ParcelaCartaoEntity(
 
     val mesFatura: Int,
 
-    val anoFatura: Int
+    val anoFatura: Int,
+
+    val quitadaAnteriormente: Boolean = false
 )

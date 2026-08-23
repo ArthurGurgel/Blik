@@ -63,7 +63,8 @@ interface ParcelaCartaoDao {
             parcelas_cartao.totalParcelas AS totalParcelas,
             parcelas_cartao.valor AS valor,
             parcelas_cartao.mesFatura AS mesFatura,
-            parcelas_cartao.anoFatura AS anoFatura
+            parcelas_cartao.anoFatura AS anoFatura,
+            parcelas_cartao.quitadaAnteriormente AS quitadaAnteriormente
         FROM parcelas_cartao
         INNER JOIN movimentacoes
             ON parcelas_cartao.movimentacaoId = movimentacoes.id
