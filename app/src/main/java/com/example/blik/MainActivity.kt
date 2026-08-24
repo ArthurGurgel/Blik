@@ -1,5 +1,12 @@
 package com.example.blik
 
+import com.example.blik.ui.theme.BlikLogo
+import com.example.blik.ui.theme.BlikPrimary
+import com.example.blik.ui.theme.BlikEntradaContainer
+import com.example.blik.ui.theme.BlikFatura
+import com.example.blik.ui.theme.BlikFaturaContainer
+import com.example.blik.ui.theme.BlikSaida
+import com.example.blik.ui.theme.BlikSaidaContainer
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -11,9 +18,12 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -36,6 +46,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.rememberDatePickerState
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -46,6 +57,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.platform.LocalContext
@@ -59,7 +73,7 @@ import com.example.blik.ui.theme.BlikTheme
 import kotlinx.coroutines.launch
 
 data class Movimentacao(
-    val id: Int = 0,
+   val id: Int = 0,
     val descricao: String,
     val valor: Double,
     val tipo: String,
@@ -73,7 +87,6 @@ data class Movimentacao(
     val cartaoId: Int? = null,
     val cartaoNome: String? = null,
     val quantidadeParcelas: Int = 1,
-    val parcelaAtual: Int = 1,
     val data: String
 )
 
@@ -452,7 +465,6 @@ fun AppFinanceiro() {
                 contas = contas,
                 categorias = categorias,
                 cartoes = cartoes,
-                parcelasCartao = parcelasCartao,
 
                 onSalvar = { novaMovimentacao ->
 
@@ -516,9 +528,9 @@ fun AppFinanceiro() {
                                         cartaoId = cartaoId,
                                         valorTotal = novaMovimentacao.valor,
                                         quantidadeParcelas = novaMovimentacao.quantidadeParcelas,
-                                        parcelaAtual = novaMovimentacao.parcelaAtual,
                                         dataCompra = novaMovimentacao.data,
-                                        diaFechamento = cartao.diaFechamento
+                                        diaFechamento = cartao.diaFechamento,
+                                        diaVencimento = cartao.diaVencimento
                                     )
 
                                 parcelaCartaoDao
@@ -543,11 +555,14 @@ fun AppFinanceiro() {
                 categorias = categorias,
                 cartoes = cartoes,
                 movimentacaoParaEditar = movimentacaoEmEdicao,
-                parcelasCartao = parcelasCartao,
 
                 onSalvar = { movimentacao ->
 
                     scope.launch {
+
+                        // =============================================
+                        // EDITA A MOVIMENTAÇÃO
+                        // =============================================
 
                         dao.editar(
                             id = movimentacao.id,
@@ -559,72 +574,119 @@ fun AppFinanceiro() {
                             contaDestinoId = movimentacao.contaDestinoId,
                             categoriaId = movimentacao.categoriaId,
                             cartaoId = movimentacao.cartaoId,
-                            quantidadeParcelas = movimentacao.quantidadeParcelas,
+                            quantidadeParcelas =
+                                movimentacao.quantidadeParcelas,
                             data = movimentacao.data
                         )
 
-                        val parcelaReferencia =
+
+                        // =============================================
+                        // GUARDA QUAIS PARCELAS JÁ ERAM HISTÓRICAS
+                        // =============================================
+
+                        val quitadasAnteriormentePreservadas =
                             parcelasCartao
                                 .filter { parcela ->
+
                                     parcela.movimentacaoId ==
                                             movimentacao.id &&
-                                            !parcela.quitadaAnteriormente
+
+                                            parcela.quitadaAnteriormente
                                 }
-                                .minByOrNull { parcela ->
+                                .map { parcela ->
                                     parcela.numeroParcela
                                 }
-
-                        val mesFaturaReferencia =
-                            parcelaReferencia?.mesFatura
-
-                        val anoFaturaReferencia =
-                            parcelaReferencia?.anoFatura
+                                .toSet()
 
 
+                        // =============================================
+                        // REMOVE AS PARCELAS ANTIGAS
+                        // =============================================
 
-                        parcelaCartaoDao.excluirPorMovimentacao(
-                            movimentacao.id
-                        )
+                        parcelaCartaoDao
+                            .excluirPorMovimentacao(
+                                movimentacao.id
+                            )
+
+
+                        // =============================================
+                        // RECRIA SE CONTINUAR SENDO COMPRA NO CRÉDITO
+                        // =============================================
+
                         if (
                             movimentacao.tipo == "Saída" &&
                             movimentacao.formaPagamento == "Crédito"
                         ) {
+
                             val cartaoId =
                                 movimentacao.cartaoId
+
                             val cartao =
-                                cartoes.find { cartao ->
-                                    cartao.id == cartaoId
+                                cartoes.find { item ->
+                                    item.id == cartaoId
                                 }
+
+
                             if (
                                 cartaoId != null &&
                                 cartao != null
                             ) {
+
                                 val parcelas =
                                     gerarParcelasCartao(
-                                        movimentacaoId = movimentacao.id,
-                                        cartaoId = cartaoId,
-                                        valorTotal = movimentacao.valor,
-                                        quantidadeParcelas = movimentacao.quantidadeParcelas,
-                                        dataCompra = movimentacao.data,
-                                        diaFechamento = cartao.diaFechamento,
-                                        parcelaAtual = movimentacao.parcelaAtual,
-                                        mesFaturaReferencia = mesFaturaReferencia,
-                                        anoFaturaReferencia = anoFaturaReferencia
+                                        movimentacaoId =
+                                            movimentacao.id,
+
+                                        cartaoId =
+                                            cartaoId,
+
+                                        valorTotal =
+                                            movimentacao.valor,
+
+                                        quantidadeParcelas =
+                                            movimentacao.quantidadeParcelas,
+
+                                        dataCompra =
+                                            movimentacao.data,
+
+                                        diaFechamento =
+                                            cartao.diaFechamento,
+
+                                        diaVencimento =
+                                            cartao.diaVencimento,
+
+                                        quitadasAnteriormentePreservadas =
+                                            quitadasAnteriormentePreservadas
                                     )
-                                parcelaCartaoDao.inserirTodas(
-                                    parcelas
-                                )
+
+
+                                parcelaCartaoDao
+                                    .inserirTodas(
+                                        parcelas
+                                    )
                             }
                         }
-                        movimentacaoEmEdicao = null
-                        telaAtual = "historico"
 
+
+                        // =============================================
+                        // FINALIZA A EDIÇÃO
+                        // =============================================
+
+                        movimentacaoEmEdicao =
+                            null
+
+                        telaAtual =
+                            "historico"
                     }
                 },
 
                 onVoltar = {
-                    movimentacaoEmEdicao = null
-                    telaAtual = "historico"
+
+                    movimentacaoEmEdicao =
+                        null
+
+                    telaAtual =
+                        "historico"
                 }
             )
         }
@@ -977,33 +1039,95 @@ fun TelaInicial(
 
         drawerContent = {
 
-            ModalDrawerSheet {
+            ModalDrawerSheet(
+                drawerContainerColor =
+                    MaterialTheme.colorScheme.surface
+            ) {
 
                 Spacer(
                     modifier = Modifier.height(24.dp)
                 )
 
-                Text(
-                    text = "Blik",
-                    fontSize = 28.sp,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.padding(16.dp)
+                Column(
+                    modifier =
+                        Modifier.padding(
+                            horizontal = 20.dp,
+                            vertical = 12.dp
+                        )
+                ) {
+
+                    Text(
+                        text = "Blik",
+                        fontSize = 30.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = BlikLogo
+                    )
+
+                    Spacer(
+                        modifier = Modifier.height(2.dp)
+                    )
+
+                    Text(
+                        text = "Controle financeiro",
+                        fontSize = 13.sp,
+                        color =
+                            MaterialTheme.colorScheme
+                                .onSurfaceVariant
+                    )
+                }
+
+                val coresItemDrawer =
+                    androidx.compose.material3.NavigationDrawerItemDefaults.colors(
+                        selectedContainerColor =
+                            MaterialTheme.colorScheme.primaryContainer,
+
+                        selectedTextColor =
+                            MaterialTheme.colorScheme.primary,
+
+                        unselectedContainerColor =
+                            androidx.compose.ui.graphics.Color.Transparent,
+
+                        unselectedTextColor =
+                            MaterialTheme.colorScheme.onSurface
+                    )
+
+                Spacer(
+                    modifier = Modifier.height(12.dp)
                 )
 
                 NavigationDrawerItem(
                     label = {
-                        Text("Início")
+                        Text(
+                            text = "Início",
+                            fontWeight = FontWeight.SemiBold
+                        )
                     },
+
                     selected = true,
+
                     onClick = {
                         scope.launch {
                             drawerState.close()
                         }
-                    }
+                    },
+
+                    modifier =
+                        Modifier.padding(
+                            horizontal = 12.dp,
+                            vertical = 2.dp
+                        ),
+
+                    shape =
+                        androidx.compose.foundation.shape.RoundedCornerShape(
+                            14.dp
+                        ),
+
+                    colors = coresItemDrawer
                 )
+
                 NavigationDrawerItem(
                     label = {
-                        Text("Movimentações")
+                        Text("Histórico")
                     },
 
                     selected = false,
@@ -1015,14 +1139,29 @@ fun TelaInicial(
                         }
 
                         onHistorico()
-                    }
+                    },
+
+                    modifier =
+                        Modifier.padding(
+                            horizontal = 12.dp,
+                            vertical = 2.dp
+                        ),
+
+                    shape =
+                        androidx.compose.foundation.shape.RoundedCornerShape(
+                            14.dp
+                        ),
+
+                    colors = coresItemDrawer
                 )
 
                 NavigationDrawerItem(
                     label = {
-                        Text("Gerenciar contas")
+                        Text("Contas")
                     },
+
                     selected = false,
+
                     onClick = {
 
                         scope.launch {
@@ -1030,14 +1169,29 @@ fun TelaInicial(
                         }
 
                         onContas()
-                    }
+                    },
+
+                    modifier =
+                        Modifier.padding(
+                            horizontal = 12.dp,
+                            vertical = 2.dp
+                        ),
+
+                    shape =
+                        androidx.compose.foundation.shape.RoundedCornerShape(
+                            14.dp
+                        ),
+
+                    colors = coresItemDrawer
                 )
 
                 NavigationDrawerItem(
                     label = {
                         Text("Cartões")
                     },
+
                     selected = false,
+
                     onClick = {
 
                         scope.launch {
@@ -1045,27 +1199,59 @@ fun TelaInicial(
                         }
 
                         onCartoes()
-                    }
+                    },
+
+                    modifier =
+                        Modifier.padding(
+                            horizontal = 12.dp,
+                            vertical = 2.dp
+                        ),
+
+                    shape =
+                        androidx.compose.foundation.shape.RoundedCornerShape(
+                            14.dp
+                        ),
+
+                    colors = coresItemDrawer
                 )
 
                 NavigationDrawerItem(
                     label = {
                         Text("Faturas")
                     },
+
                     selected = false,
+
                     onClick = {
+
                         scope.launch {
                             drawerState.close()
                         }
+
                         onFaturas()
-                    }
+                    },
+
+                    modifier =
+                        Modifier.padding(
+                            horizontal = 12.dp,
+                            vertical = 2.dp
+                        ),
+
+                    shape =
+                        androidx.compose.foundation.shape.RoundedCornerShape(
+                            14.dp
+                        ),
+
+                    colors = coresItemDrawer
                 )
 
                 NavigationDrawerItem(
                     label = {
-                        Text("Gerenciar categorias")
+                        Text("Categorias")
                     },
+
                     selected = false,
+
                     onClick = {
 
                         scope.launch {
@@ -1073,7 +1259,20 @@ fun TelaInicial(
                         }
 
                         onCategorias()
-                    }
+                    },
+
+                    modifier =
+                        Modifier.padding(
+                            horizontal = 12.dp,
+                            vertical = 2.dp
+                        ),
+
+                    shape =
+                        androidx.compose.foundation.shape.RoundedCornerShape(
+                            14.dp
+                        ),
+
+                    colors = coresItemDrawer
                 )
             }
         }
@@ -1087,9 +1286,12 @@ fun TelaInicial(
                 TopAppBar(
 
                     title = {
+
                         Text(
                             text = "Blik",
-                            fontWeight = FontWeight.Bold
+                            fontSize = 26.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = BlikLogo
                         )
                     },
 
@@ -1105,22 +1307,48 @@ fun TelaInicial(
 
                             Text(
                                 text = "☰",
-                                fontSize = 28.sp,
-                                fontWeight = FontWeight.Bold
+                                fontSize = 25.sp,
+                                fontWeight = FontWeight.Medium,
+                                color =
+                                    MaterialTheme.colorScheme.onBackground
                             )
                         }
-                    }
+                    },
+
+                    colors =
+                        androidx.compose.material3.TopAppBarDefaults
+                            .topAppBarColors(
+                                containerColor =
+                                    MaterialTheme.colorScheme.background,
+
+                                titleContentColor =
+                                    BlikLogo,
+
+                                navigationIconContentColor =
+                                    MaterialTheme.colorScheme.onBackground
+                            )
                 )
             },
 
             floatingActionButton = {
+
                 androidx.compose.material3.FloatingActionButton(
-                    onClick = onNovaMovimentacao
+                    onClick = onNovaMovimentacao,
+
+                    containerColor =
+                        MaterialTheme.colorScheme.primary,
+
+                    contentColor =
+                        MaterialTheme.colorScheme.onPrimary,
+
+                    shape =
+                        androidx.compose.foundation.shape.CircleShape
                 ) {
+
                     Text(
                         text = "+",
-                        fontSize = 26.sp,
-                        fontWeight = FontWeight.Bold
+                        fontSize = 28.sp,
+                        fontWeight = FontWeight.Medium
                     )
                 }
             },
@@ -1315,14 +1543,42 @@ fun TelaInicial(
                        modifier = Modifier.height(24.dp)
                    )
 
-                   Text(
-                       text = "Contas",
-                       fontSize = 22.sp,
-                       fontWeight = FontWeight.Bold
-                   )
+                   Row(
+                       modifier =
+                           Modifier.fillMaxWidth(),
+
+                       horizontalArrangement =
+                           Arrangement.SpaceBetween,
+
+                       verticalAlignment =
+                           androidx.compose.ui.Alignment.CenterVertically
+                   ) {
+
+                       Text(
+                           text = "Contas",
+                           fontSize = 22.sp,
+                           fontWeight = FontWeight.Bold,
+                           color =
+                               MaterialTheme.colorScheme.onBackground
+                       )
+
+                       Text(
+                           text = "Ver todas",
+                           fontSize = 14.sp,
+                           fontWeight = FontWeight.Medium,
+                           color =
+                               MaterialTheme.colorScheme.primary,
+
+                           modifier =
+                               Modifier.clickable {
+                                   onContas()
+                               }
+                       )
+                   }
 
                    Spacer(
-                       modifier = Modifier.height(12.dp)
+                       modifier =
+                           Modifier.height(10.dp)
                    )
                }
 
@@ -1343,108 +1599,381 @@ fun TelaInicial(
 
                         ContaItem(
                             nome = conta.nome,
-                            saldo = formatarDinheiro(saldo)
+                            saldo =
+                                formatarDinheiro(
+                                    saldo
+                                ),
+                            onClick = {
+                                onContas()
+                            }
                         )
                     }
                 }
+
                 item {
 
                     Spacer(
                         modifier = Modifier.height(24.dp)
                     )
 
-                    Text(
-                        text = "Faturas",
-                        fontSize = 22.sp,
-                        fontWeight = FontWeight.Bold
-                    )
+                    Row(
+                        modifier =
+                            Modifier.fillMaxWidth(),
+
+                        horizontalArrangement =
+                            Arrangement.SpaceBetween,
+
+                        verticalAlignment =
+                            androidx.compose.ui.Alignment.CenterVertically
+                    ) {
+
+                        Text(
+                            text = "Faturas do mês",
+                            fontSize = 22.sp,
+                            fontWeight = FontWeight.Bold,
+                            color =
+                                MaterialTheme.colorScheme.onBackground
+                        )
+
+                        Text(
+                            text = "Ver todas",
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Medium,
+                            color =
+                                MaterialTheme.colorScheme.primary,
+
+                            modifier =
+                                Modifier.clickable {
+                                    onFaturas()
+                                }
+                        )
+                    }
 
                     Spacer(
-                        modifier = Modifier.height(12.dp)
+                        modifier = Modifier.height(10.dp)
                     )
                 }
 
-                if (faturasAtuais.isEmpty()) {
-                    item {
-                        Text(
-                            text = "Nenhuma fatura em aberto neste mês."
-                        )
-                    }
-                } else {
+               if (faturasAtuais.isEmpty()) {
+
+                   item {
+
+                       Card(
+                           modifier =
+                               Modifier
+                                   .fillMaxWidth()
+                                   .clickable {
+                                       onFaturas()
+                                   },
+
+                           shape =
+                               androidx.compose.foundation.shape
+                                   .RoundedCornerShape(18.dp),
+
+                           colors =
+                               androidx.compose.material3.CardDefaults
+                                   .cardColors(
+                                       containerColor =
+                                           MaterialTheme.colorScheme.surface
+                                   ),
+
+                           elevation =
+                               androidx.compose.material3.CardDefaults
+                                   .cardElevation(
+                                       defaultElevation = 1.dp
+                                   )
+                       ) {
+
+                           Column(
+                               modifier =
+                                   Modifier
+                                       .fillMaxWidth()
+                                       .padding(
+                                           horizontal = 18.dp,
+                                           vertical = 20.dp
+                                       ),
+
+                               horizontalAlignment =
+                                   androidx.compose.ui.Alignment.CenterHorizontally
+                           ) {
+
+                               Text(
+                                   text = "Nenhuma fatura neste mês",
+
+                                   fontSize = 16.sp,
+
+                                   fontWeight =
+                                       FontWeight.SemiBold,
+
+                                   textAlign =
+                                       TextAlign.Center,
+
+                                   color =
+                                       MaterialTheme.colorScheme.onSurface
+                               )
+
+
+                               Spacer(
+                                   modifier =
+                                       Modifier.height(5.dp)
+                               )
+
+
+                               Text(
+                                   text =
+                                       "Não há compras no crédito " +
+                                               "para o período atual.",
+
+                                   fontSize = 13.sp,
+
+                                   textAlign =
+                                       TextAlign.Center,
+
+                                   color =
+                                       MaterialTheme.colorScheme
+                                           .onSurfaceVariant
+                               )
+
+
+                               Spacer(
+                                   modifier =
+                                       Modifier.height(12.dp)
+                               )
+
+
+                               Text(
+                                   text = "Ver faturas",
+
+                                   fontSize = 13.sp,
+
+                                   fontWeight =
+                                       FontWeight.SemiBold,
+
+                                   color =
+                                       MaterialTheme.colorScheme.primary
+                               )
+                           }
+                       }
+                   }
+               }else {
                     items(
                         items = faturasAtuais
                     ) { fatura ->
+                        val corStatus =
+                            when (fatura.status) {
+
+                                "Vencida" ->
+                                    BlikSaida
+
+                                "Fechada" ->
+                                    BlikFatura
+
+                                else ->
+                                    BlikPrimary
+                            }
+
+                        val corFundoStatus =
+                            when (fatura.status) {
+
+                                "Vencida" ->
+                                    BlikSaidaContainer
+
+                                "Fechada" ->
+                                    BlikFaturaContainer
+
+                                else ->
+                                    BlikEntradaContainer
+                            }
+
+
                         Card(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 5.dp)
-                                .clickable{
-                                    onFaturas()
-                                }
+                            modifier =
+                                Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 5.dp)
+                                    .clickable {
+                                        onFaturas()
+                                    },
+
+                            shape =
+                                androidx.compose.foundation.shape.RoundedCornerShape(
+                                    18.dp
+                                ),
+
+                            colors =
+                                androidx.compose.material3.CardDefaults.cardColors(
+                                    containerColor =
+                                        MaterialTheme.colorScheme.surface
+                                ),
+
+                            elevation =
+                                androidx.compose.material3.CardDefaults.cardElevation(
+                                    defaultElevation = 2.dp
+                                )
                         ) {
+
                             Column(
-                                modifier = Modifier.padding(16.dp)
+                                modifier =
+                                    Modifier.padding(16.dp)
                             ) {
+
+                                // =============================================
+                                // CARTÃO + STATUS
+                                // =============================================
+
                                 Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween
+                                    modifier =
+                                        Modifier.fillMaxWidth(),
+
+                                    horizontalArrangement =
+                                        Arrangement.SpaceBetween,
+
+                                    verticalAlignment =
+                                        androidx.compose.ui.Alignment.CenterVertically
                                 ) {
+
                                     Text(
                                         text = fatura.cartaoNome,
-                                        fontWeight = FontWeight.Bold,
-                                        fontSize = 17.sp
+                                        fontWeight =
+                                            FontWeight.SemiBold,
+                                        fontSize = 17.sp,
+                                        color =
+                                            MaterialTheme.colorScheme.onSurface
                                     )
-                                    Text(
-                                        text = fatura.status,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                }
-                                Spacer(
-                                    modifier = Modifier.height(12.dp)
-                                )
 
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween
-                                ) {
-                                    Column(
-                                        modifier = Modifier.weight(1f)
-                                    ){
-                                        val mostrarFechamento = fatura.status == "Aberta"
-                                        val tituloData =
-                                            if (mostrarFechamento) {
-                                                "Fechamento"
-                                            } else {
-                                                "Vencimento"
-                                            }
-                                        val dataExibida =
-                                            if (mostrarFechamento) {
-                                                fatura.fechamento
-                                            } else {
-                                                fatura.vencimento
-                                            }
-                                        Text(
-                                            text = tituloData,
-                                            fontSize = 12.sp
-                                        )
+
+                                    Box(
+                                        modifier =
+                                            Modifier.background(
+                                                color =
+                                                    corFundoStatus,
+
+                                                shape =
+                                                    androidx.compose.foundation.shape
+                                                        .RoundedCornerShape(
+                                                            50.dp
+                                                        )
+                                            )
+                                    ) {
 
                                         Text(
-                                            text = formatarDataCalendario(
-                                                dataExibida
-                                            ),
-                                            fontWeight = FontWeight.Medium
+                                            text =
+                                                fatura.status.uppercase(),
+
+                                            modifier =
+                                                Modifier.padding(
+                                                    horizontal = 10.dp,
+                                                    vertical = 4.dp
+                                                ),
+
+                                            fontSize = 11.sp,
+                                            fontWeight =
+                                                FontWeight.Bold,
+
+                                            color =
+                                                corStatus
                                         )
                                     }
+                                }
+
+
+                                Spacer(
+                                    modifier =
+                                        Modifier.height(14.dp)
+                                )
+
+
+                                val mostrarFechamento =
+                                    fatura.status == "Aberta"
+
+                                val tituloData =
+                                    if (mostrarFechamento) {
+                                        "Fechamento"
+                                    } else {
+                                        "Vencimento"
+                                    }
+
+                                val dataExibida =
+                                    if (mostrarFechamento) {
+                                        fatura.fechamento
+                                    } else {
+                                        fatura.vencimento
+                                    }
+
+
+                                // =============================================
+                                // DATA + VALOR
+                                // =============================================
+
+                                Row(
+                                    modifier =
+                                        Modifier.fillMaxWidth(),
+
+                                    horizontalArrangement =
+                                        Arrangement.SpaceBetween,
+
+                                    verticalAlignment =
+                                        androidx.compose.ui.Alignment.Bottom
+                                ) {
+
+                                    Column {
+
+                                        Text(
+                                            text = tituloData,
+                                            fontSize = 12.sp,
+                                            color =
+                                                MaterialTheme.colorScheme
+                                                    .onSurfaceVariant
+                                        )
+
+                                        Spacer(
+                                            modifier =
+                                                Modifier.height(2.dp)
+                                        )
+
+                                        Text(
+                                            text =
+                                                formatarDataCalendario(
+                                                    dataExibida
+                                                ),
+
+                                            fontSize = 14.sp,
+                                            fontWeight =
+                                                FontWeight.Medium
+                                        )
+                                    }
+
+
                                     Column(
-                                        horizontalAlignment = androidx.compose.ui.Alignment.End
-                                    ){
+                                        horizontalAlignment =
+                                            androidx.compose.ui.Alignment.End
+                                    ) {
+
                                         Text(
                                             text = "Em aberto",
-                                            fontSize = 12.sp
+                                            fontSize = 12.sp,
+                                            color =
+                                                MaterialTheme.colorScheme
+                                                    .onSurfaceVariant
                                         )
+
+                                        Spacer(
+                                            modifier =
+                                                Modifier.height(2.dp)
+                                        )
+
                                         Text(
-                                            text = formatarDinheiro(fatura.restante),
-                                            fontWeight = FontWeight.Bold
+                                            text =
+                                                formatarDinheiro(
+                                                    fatura.restante
+                                                ),
+
+                                            fontSize = 17.sp,
+                                            fontWeight =
+                                                FontWeight.Bold,
+
+                                            color =
+                                                corStatus
                                         )
                                     }
                                 }
@@ -1468,11 +1997,10 @@ fun TelaNovaMovimentacao(
     contas: List<ContaEntity>,
     categorias: List<CategoriaEntity>,
     cartoes: List<CartaoComConta>,
-    parcelasCartao: List<ParcelaCartaoComDetalhes> = emptyList(),
     movimentacaoParaEditar: Movimentacao? = null,
     onSalvar: (Movimentacao) -> Unit,
     onVoltar: () -> Unit
-) {
+){
     BackHandler {
         onVoltar()
     }
@@ -1530,30 +2058,6 @@ fun TelaNovaMovimentacao(
         )
     }
 
-    val parcelaAtualExistente =
-        if (movimentacaoParaEditar != null) {
-
-            parcelasCartao
-                .filter { parcela ->
-                    parcela.movimentacaoId ==
-                            movimentacaoParaEditar.id &&
-                            !parcela.quitadaAnteriormente
-                }
-                .minByOrNull { parcela ->
-                    parcela.numeroParcela
-                }
-                ?.numeroParcela
-                ?: 1
-
-        } else {
-            1
-        }
-
-    var parcelaAtual by remember {
-        mutableStateOf(
-            parcelaAtualExistente.toString()
-        )
-    }
 
     var data by remember {
         mutableStateOf(
@@ -1570,38 +2074,6 @@ fun TelaNovaMovimentacao(
     }
 
     // POPUPS
-
-    var mostrarSelecaoTipo by remember {
-        mutableStateOf(false)
-    }
-
-    var mostrarSelecaoFormaPagamento by remember {
-        mutableStateOf(false)
-    }
-
-    var mostrarSelecaoConta by remember {
-        mutableStateOf(false)
-    }
-
-    var mostrarSelecaoContaDestino by remember {
-        mutableStateOf(false)
-    }
-
-    var mostrarSelecaoCategoria by remember {
-        mutableStateOf(false)
-    }
-
-    var mostrarSelecaoCartao by remember {
-        mutableStateOf(false)
-    }
-
-    var mostrarSelecaoParcelas by remember {
-        mutableStateOf(false)
-    }
-
-    var mostrarSelecaoParcelaAtual by remember {
-        mutableStateOf(false)
-    }
 
     var mostrarCalendario by remember {
         mutableStateOf(false)
@@ -1664,12 +2136,32 @@ fun TelaNovaMovimentacao(
                         } else {
                             "Editar movimentação"
                         },
+
                     fontSize = 28.sp,
-                    fontWeight = FontWeight.Bold
+                    fontWeight = FontWeight.Bold,
+                    color =
+                        MaterialTheme.colorScheme.onBackground
                 )
 
                 Spacer(
-                    modifier = Modifier.height(24.dp)
+                    modifier = Modifier.height(4.dp)
+                )
+
+                Text(
+                    text =
+                        if (movimentacaoParaEditar == null) {
+                            "Registre uma nova entrada, saída ou transferência"
+                        } else {
+                            "Atualize os dados da movimentação"
+                        },
+
+                    fontSize = 14.sp,
+                    color =
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                Spacer(
+                    modifier = Modifier.height(20.dp)
                 )
 
 
@@ -1677,61 +2169,140 @@ fun TelaNovaMovimentacao(
 
                 OutlinedTextField(
                     value = descricao,
+
                     onValueChange = {
                         descricao = it
                         mensagem = ""
                     },
+
                     label = {
                         Text("Descrição")
                     },
-                    modifier = Modifier.fillMaxWidth()
-                )
 
-                Spacer(
-                    modifier = Modifier.height(12.dp)
-                )
+                    modifier =
+                        Modifier.fillMaxWidth(),
 
+                    singleLine = true,
+
+                    shape =
+                        androidx.compose.foundation.shape
+                            .RoundedCornerShape(14.dp)
+                )
 
                 // VALOR
 
                 OutlinedTextField(
                     value = valor,
+
                     onValueChange = {
                         valor = it
                         mensagem = ""
                     },
+
                     label = {
                         Text("Valor")
                     },
+
                     placeholder = {
                         Text("Ex.: 150,00")
                     },
-                    modifier = Modifier.fillMaxWidth()
+
+                    modifier =
+                        Modifier.fillMaxWidth(),
+
+                    singleLine = true,
+
+                    shape =
+                        androidx.compose.foundation.shape
+                            .RoundedCornerShape(14.dp)
                 )
 
                 Spacer(
-                    modifier = Modifier.height(12.dp)
+                    modifier = Modifier.height(16.dp)
                 )
 
 
                 // TIPO
 
-                Button(
-                    onClick = {
-                        mostrarSelecaoTipo = true
-                    },
-                    modifier = Modifier.fillMaxWidth()
-                ) {
+                Text(
+                    text = "Tipo",
 
-                    Text(
-                        text =
-                            if (tipo.isBlank()) {
-                                "Tipo: Selecione"
-                            } else {
-                                "Tipo: $tipo"
+                    fontSize = 13.sp,
+
+                    fontWeight =
+                        FontWeight.Medium,
+
+                    color =
+                        MaterialTheme.colorScheme
+                            .onSurfaceVariant
+                )
+
+                Spacer(
+                    modifier = Modifier.height(6.dp)
+                )
+
+
+                DropdownBlik(
+                    valorSelecionado =
+                        if (tipo.isBlank()) {
+                            "Selecione"
+                        } else {
+                            tipo
+                        },
+
+                    opcoes =
+                        listOf(
+                            "Entrada",
+                            "Saída",
+                            "Transferência"
+                        ),
+
+                    modifier =
+                        Modifier.fillMaxWidth(),
+
+                    onSelecionar = { novoTipo ->
+
+                        when (novoTipo) {
+
+                            "Entrada" -> {
+
+                                tipo = "Entrada"
+
+                                formaPagamento = ""
+
+                                cartaoSelecionado = null
+
+                                contaDestinoSelecionada = null
+
+                                quantidadeParcelas = "1"
                             }
-                    )
-                }
+
+
+                            "Saída" -> {
+
+                                tipo = "Saída"
+
+                                contaDestinoSelecionada = null
+                            }
+
+
+                            "Transferência" -> {
+
+                                tipo = "Transferência"
+
+                                formaPagamento = ""
+
+                                categoriaSelecionada = null
+
+                                cartaoSelecionado = null
+
+                                quantidadeParcelas = "1"
+                            }
+                        }
+
+                        mensagem = ""
+                    }
+                )
 
 
                 // -------------------------
@@ -1744,41 +2315,83 @@ fun TelaNovaMovimentacao(
                         modifier = Modifier.height(12.dp)
                     )
 
-                    Button(
-                        onClick = {
-                            mostrarSelecaoConta = true
-                        },
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
+                    Text(
+                        text = "Conta",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
 
-                        Text(
-                            text =
-                                "Conta: ${
-                                    contaSelecionada?.nome
-                                        ?: "Selecione"
-                                }"
-                        )
-                    }
+                    Spacer(
+                        modifier = Modifier.height(6.dp)
+                    )
+
+                    DropdownBlik(
+                        valorSelecionado =
+                            contaSelecionada?.nome
+                                ?: "Selecione",
+
+                        opcoes =
+                            contas.map { conta ->
+                                conta.nome
+                            },
+
+                        modifier =
+                            Modifier.fillMaxWidth(),
+
+                        onSelecionar = { nomeConta ->
+
+                            contaSelecionada =
+                                contas.firstOrNull { conta ->
+                                    conta.nome == nomeConta
+                                }
+
+                            mensagem = ""
+                        }
+                    )
 
                     Spacer(
                         modifier = Modifier.height(12.dp)
                     )
 
-                    Button(
-                        onClick = {
-                            mostrarSelecaoCategoria = true
-                        },
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
+                    Spacer(
+                        modifier = Modifier.height(14.dp)
+                    )
 
-                        Text(
-                            text =
-                                "Categoria: ${
-                                    categoriaSelecionada?.nome
-                                        ?: "Selecione"
-                                }"
-                        )
-                    }
+                    Text(
+                        text = "Categoria",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    Spacer(
+                        modifier = Modifier.height(6.dp)
+                    )
+
+                    DropdownBlik(
+                        valorSelecionado =
+                            categoriaSelecionada?.nome
+                                ?: "Selecione",
+
+                        opcoes =
+                            categorias.map { categoria ->
+                                categoria.nome
+                            },
+
+                        modifier =
+                            Modifier.fillMaxWidth(),
+
+                        onSelecionar = { nomeCategoria ->
+
+                            categoriaSelecionada =
+                                categorias.firstOrNull { categoria ->
+                                    categoria.nome == nomeCategoria
+                                }
+
+                            mensagem = ""
+                        }
+                    )
                 }
 
 
@@ -1792,22 +2405,58 @@ fun TelaNovaMovimentacao(
                         modifier = Modifier.height(12.dp)
                     )
 
-                    Button(
-                        onClick = {
-                            mostrarSelecaoFormaPagamento = true
-                        },
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
+                    Text(
+                        text = "Forma de pagamento",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
 
-                        Text(
-                            text =
-                                if (formaPagamento.isBlank()) {
-                                    "Forma de pagamento: Selecione"
-                                } else {
-                                    "Forma de pagamento: $formaPagamento"
+                    Spacer(
+                        modifier = Modifier.height(6.dp)
+                    )
+
+                    DropdownBlik(
+                        valorSelecionado =
+                            when (formaPagamento) {
+                                "Conta" -> "Conta / Débito"
+                                "Crédito" -> "Crédito"
+                                else -> "Selecione"
+                            },
+
+                        opcoes =
+                            listOf(
+                                "Conta / Débito",
+                                "Crédito"
+                            ),
+
+                        modifier =
+                            Modifier.fillMaxWidth(),
+
+                        onSelecionar = { opcao ->
+
+                            when (opcao) {
+
+                                "Conta / Débito" -> {
+
+                                    formaPagamento = "Conta"
+
+                                    cartaoSelecionado = null
+
+                                    quantidadeParcelas = "1"
                                 }
-                        )
-                    }
+
+                                "Crédito" -> {
+
+                                    formaPagamento = "Crédito"
+
+                                    contaSelecionada = null
+                                }
+                            }
+
+                            mensagem = ""
+                        }
+                    )
 
 
                     // SAÍDA PELA CONTA
@@ -1818,21 +2467,44 @@ fun TelaNovaMovimentacao(
                             modifier = Modifier.height(12.dp)
                         )
 
-                        Button(
-                            onClick = {
-                                mostrarSelecaoConta = true
-                            },
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
+                        Spacer(
+                            modifier = Modifier.height(14.dp)
+                        )
 
-                            Text(
-                                text =
-                                    "Conta: ${
-                                        contaSelecionada?.nome
-                                            ?: "Selecione"
-                                    }"
-                            )
-                        }
+                        Text(
+                            text = "Conta",
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+
+                        Spacer(
+                            modifier = Modifier.height(6.dp)
+                        )
+
+                        DropdownBlik(
+                            valorSelecionado =
+                                contaSelecionada?.nome
+                                    ?: "Selecione",
+
+                            opcoes =
+                                contas.map { conta ->
+                                    conta.nome
+                                },
+
+                            modifier =
+                                Modifier.fillMaxWidth(),
+
+                            onSelecionar = { nomeConta ->
+
+                                contaSelecionada =
+                                    contas.firstOrNull { conta ->
+                                        conta.nome == nomeConta
+                                    }
+
+                                mensagem = ""
+                            }
+                        )
                     }
 
 
@@ -1844,55 +2516,108 @@ fun TelaNovaMovimentacao(
                             modifier = Modifier.height(12.dp)
                         )
 
-                        Button(
-                            onClick = {
-                                mostrarSelecaoCartao = true
-                            },
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
+                        Spacer(
+                            modifier = Modifier.height(14.dp)
+                        )
 
-                            Text(
-                                text =
-                                    "Cartão: ${
-                                        cartaoSelecionado?.nome
-                                            ?: "Selecione"
-                                    }"
-                            )
-                        }
+                        Text(
+                            text = "Cartão",
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+
+                        Spacer(
+                            modifier = Modifier.height(6.dp)
+                        )
+
+                        DropdownBlik(
+                            valorSelecionado =
+                                cartaoSelecionado?.nome
+                                    ?: "Selecione",
+
+                            opcoes =
+                                cartoes.map { cartao ->
+                                    cartao.nome
+                                },
+
+                            modifier =
+                                Modifier.fillMaxWidth(),
+
+                            onSelecionar = { nomeCartao ->
+
+                                cartaoSelecionado =
+                                    cartoes.firstOrNull { cartao ->
+                                        cartao.nome == nomeCartao
+                                    }
+
+                                mensagem = ""
+                            }
+                        )
+
+                        Spacer(
+                            modifier = Modifier.height(14.dp)
+                        )
+
+                        Text(
+                            text = "Parcelamento",
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+
+                        Spacer(
+                            modifier = Modifier.height(6.dp)
+                        )
+
+                        DropdownBlik(
+                            valorSelecionado =
+                                if (quantidadeParcelas == "1") {
+                                    "1x - À vista"
+                                } else {
+                                    "${quantidadeParcelas}x"
+                                },
+
+                            opcoes =
+                                (1..24).map { numero ->
+
+                                    if (numero == 1) {
+                                        "1x - À vista"
+                                    } else {
+                                        "${numero}x"
+                                    }
+                                },
+
+                            modifier =
+                                Modifier.fillMaxWidth(),
+
+                            onSelecionar = { opcao ->
+
+                                val numeroParcelas =
+                                    if (opcao.startsWith("1x")) {
+
+                                        1
+
+                                    } else {
+
+                                        opcao
+                                            .removeSuffix("x")
+                                            .toIntOrNull()
+                                            ?: 1
+                                    }
+
+
+                                quantidadeParcelas =
+                                    numeroParcelas.toString()
+
+                                mensagem = ""
+                            }
+                        )
 
                         Spacer(
                             modifier = Modifier.height(12.dp)
                         )
 
-                        Button(
-                            onClick = {
-                                mostrarSelecaoParcelas = true
-                            },
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-
-                            Text(
-                                text =
-                                    "Parcelas: ${quantidadeParcelas}x"
-                            )
-                        }
-
-                        Spacer(
-                            modifier = Modifier.height(12.dp)
-                        )
-
-                        Button(
-                            onClick = {
-                                mostrarSelecaoParcelaAtual = true
-                            },
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-
-                            Text(
-                                text =
-                                    "Parcela atual: $parcelaAtual/$quantidadeParcelas"
-                            )
-                        }
                     }
 
 
@@ -1902,21 +2627,44 @@ fun TelaNovaMovimentacao(
                             modifier = Modifier.height(12.dp)
                         )
 
-                        Button(
-                            onClick = {
-                                mostrarSelecaoCategoria = true
-                            },
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
+                        Spacer(
+                            modifier = Modifier.height(14.dp)
+                        )
 
-                            Text(
-                                text =
-                                    "Categoria: ${
-                                        categoriaSelecionada?.nome
-                                            ?: "Selecione"
-                                    }"
-                            )
-                        }
+                        Text(
+                            text = "Categoria",
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+
+                        Spacer(
+                            modifier = Modifier.height(6.dp)
+                        )
+
+                        DropdownBlik(
+                            valorSelecionado =
+                                categoriaSelecionada?.nome
+                                    ?: "Selecione",
+
+                            opcoes =
+                                categorias.map { categoria ->
+                                    categoria.nome
+                                },
+
+                            modifier =
+                                Modifier.fillMaxWidth(),
+
+                            onSelecionar = { nomeCategoria ->
+
+                                categoriaSelecionada =
+                                    categorias.firstOrNull { categoria ->
+                                        categoria.nome == nomeCategoria
+                                    }
+
+                                mensagem = ""
+                            }
+                        )
                     }
                 }
 
@@ -1931,41 +2679,106 @@ fun TelaNovaMovimentacao(
                         modifier = Modifier.height(12.dp)
                     )
 
-                    Button(
-                        onClick = {
-                            mostrarSelecaoConta = true
-                        },
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
+                    Spacer(
+                        modifier = Modifier.height(14.dp)
+                    )
 
-                        Text(
-                            text =
-                                "Conta de origem: ${
-                                    contaSelecionada?.nome
-                                        ?: "Selecione"
-                                }"
-                        )
-                    }
+                    Text(
+                        text = "Conta de origem",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    Spacer(
+                        modifier = Modifier.height(6.dp)
+                    )
+
+                    DropdownBlik(
+                        valorSelecionado =
+                            contaSelecionada?.nome
+                                ?: "Selecione",
+
+                        opcoes =
+                            contas.map { conta ->
+                                conta.nome
+                            },
+
+                        modifier =
+                            Modifier.fillMaxWidth(),
+
+                        onSelecionar = { nomeConta ->
+
+                            val novaConta =
+                                contas.firstOrNull { conta ->
+                                    conta.nome == nomeConta
+                                }
+
+                            contaSelecionada =
+                                novaConta
+
+                            // Se a nova origem for igual ao destino
+                            // anteriormente selecionado, limpa o destino.
+                            if (
+                                contaDestinoSelecionada?.id ==
+                                novaConta?.id
+                            ) {
+                                contaDestinoSelecionada = null
+                            }
+
+                            mensagem = ""
+                        }
+                    )
 
                     Spacer(
                         modifier = Modifier.height(12.dp)
                     )
 
-                    Button(
-                        onClick = {
-                            mostrarSelecaoContaDestino = true
-                        },
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
+                    Spacer(
+                        modifier = Modifier.height(14.dp)
+                    )
 
-                        Text(
-                            text =
-                                "Conta de destino: ${
-                                    contaDestinoSelecionada?.nome
-                                        ?: "Selecione"
-                                }"
-                        )
-                    }
+                    Text(
+                        text = "Conta de destino",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    Spacer(
+                        modifier = Modifier.height(6.dp)
+                    )
+
+                    DropdownBlik(
+                        valorSelecionado =
+                            contaDestinoSelecionada?.nome
+                                ?: "Selecione",
+
+                        opcoes =
+                            contas
+                                .filter { conta ->
+                                    conta.id !=
+                                            contaSelecionada?.id
+                                }
+                                .map { conta ->
+                                    conta.nome
+                                },
+
+                        modifier =
+                            Modifier.fillMaxWidth(),
+
+                        onSelecionar = { nomeConta ->
+
+                            contaDestinoSelecionada =
+                                contas.firstOrNull { conta ->
+                                    conta.nome == nomeConta &&
+                                            conta.id !=
+                                            contaSelecionada?.id
+                                }
+
+                            mensagem = ""
+                        }
+                    )
                 }
 
 
@@ -2024,11 +2837,6 @@ fun TelaNovaMovimentacao(
 
                             val parcelasConvertidas =
                                 quantidadeParcelas
-                                    .toIntOrNull()
-                                    ?: 1
-
-                            val parcelaAtualConvertida =
-                                parcelaAtual
                                     .toIntOrNull()
                                     ?: 1
 
@@ -2230,16 +3038,6 @@ fun TelaNovaMovimentacao(
                                                 1
                                             },
 
-                                        parcelaAtual =
-                                            if (
-                                                tipo == "Saída" &&
-                                                formaPagamento == "Crédito"
-                                            ) {
-                                                parcelaAtualConvertida
-                                            } else {
-                                                1
-                                            },
-
                                         data = data
                                     )
 
@@ -2285,583 +3083,6 @@ fun TelaNovaMovimentacao(
                 )
             }
         }
-
-
-        // =====================================================
-        // POPUP - TIPO
-        // =====================================================
-
-        if (mostrarSelecaoTipo) {
-
-            AlertDialog(
-                onDismissRequest = {
-                    mostrarSelecaoTipo = false
-                },
-
-                title = {
-                    Text("Selecionar tipo")
-                },
-
-                text = {
-
-                    Column {
-
-                        Button(
-                            onClick = {
-
-                                tipo = "Entrada"
-
-                                formaPagamento = ""
-
-                                cartaoSelecionado = null
-
-                                contaDestinoSelecionada = null
-
-                                quantidadeParcelas = "1"
-
-                                parcelaAtual = "1"
-
-                                mostrarSelecaoTipo = false
-                            },
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Text("Entrada")
-                        }
-
-                        Spacer(
-                            modifier = Modifier.height(8.dp)
-                        )
-
-                        Button(
-                            onClick = {
-
-                                tipo = "Saída"
-
-                                contaDestinoSelecionada = null
-
-                                mostrarSelecaoTipo = false
-                            },
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Text("Saída")
-                        }
-
-                        Spacer(
-                            modifier = Modifier.height(8.dp)
-                        )
-
-                        Button(
-                            onClick = {
-
-                                tipo = "Transferência"
-
-                                formaPagamento = ""
-
-                                categoriaSelecionada = null
-
-                                cartaoSelecionado = null
-
-                                quantidadeParcelas = "1"
-
-                                mostrarSelecaoTipo = false
-                            },
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Text("Transferência")
-                        }
-                    }
-                },
-
-                confirmButton = {},
-
-                dismissButton = {
-
-                    TextButton(
-                        onClick = {
-                            mostrarSelecaoTipo = false
-                        }
-                    ) {
-                        Text("Cancelar")
-                    }
-                }
-            )
-        }
-
-
-        // =====================================================
-        // POPUP - FORMA DE PAGAMENTO
-        // =====================================================
-
-        if (mostrarSelecaoFormaPagamento) {
-
-            AlertDialog(
-                onDismissRequest = {
-                    mostrarSelecaoFormaPagamento = false
-                },
-
-                title = {
-                    Text("Forma de pagamento")
-                },
-
-                text = {
-
-                    Column {
-
-                        Button(
-                            onClick = {
-
-                                formaPagamento = "Conta"
-
-                                cartaoSelecionado = null
-
-                                quantidadeParcelas = "1"
-
-                                mostrarSelecaoFormaPagamento =
-                                    false
-                            },
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Text("Conta / Débito")
-                        }
-
-                        Spacer(
-                            modifier = Modifier.height(8.dp)
-                        )
-
-                        Button(
-                            onClick = {
-
-                                formaPagamento = "Crédito"
-
-                                contaSelecionada = null
-
-                                mostrarSelecaoFormaPagamento =
-                                    false
-                            },
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Text("Crédito")
-                        }
-                    }
-                },
-
-                confirmButton = {},
-
-                dismissButton = {
-
-                    TextButton(
-                        onClick = {
-                            mostrarSelecaoFormaPagamento =
-                                false
-                        }
-                    ) {
-                        Text("Cancelar")
-                    }
-                }
-            )
-        }
-
-
-        // =====================================================
-        // POPUP - CONTA
-        // =====================================================
-
-        if (mostrarSelecaoConta) {
-
-            AlertDialog(
-                onDismissRequest = {
-                    mostrarSelecaoConta = false
-                },
-
-                title = {
-
-                    Text(
-                        text =
-                            if (tipo == "Transferência") {
-                                "Conta de origem"
-                            } else {
-                                "Selecionar conta"
-                            }
-                    )
-                },
-
-                text = {
-
-                    Column {
-
-                        contas.forEach { conta ->
-
-                            Button(
-                                onClick = {
-                                    contaSelecionada = conta
-                                    mostrarSelecaoConta = false
-                                },
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Text(conta.nome)
-                            }
-
-                            Spacer(
-                                modifier = Modifier.height(6.dp)
-                            )
-                        }
-                    }
-                },
-
-                confirmButton = {},
-
-                dismissButton = {
-
-                    TextButton(
-                        onClick = {
-                            mostrarSelecaoConta = false
-                        }
-                    ) {
-                        Text("Cancelar")
-                    }
-                }
-            )
-        }
-
-
-        // =====================================================
-        // POPUP - CONTA DESTINO
-        // =====================================================
-
-        if (mostrarSelecaoContaDestino) {
-
-            AlertDialog(
-                onDismissRequest = {
-                    mostrarSelecaoContaDestino = false
-                },
-
-                title = {
-                    Text("Conta de destino")
-                },
-
-                text = {
-
-                    Column {
-
-                        contas
-                            .filter {
-                                it.id != contaSelecionada?.id
-                            }
-                            .forEach { conta ->
-
-                                Button(
-                                    onClick = {
-
-                                        contaDestinoSelecionada =
-                                            conta
-
-                                        mostrarSelecaoContaDestino =
-                                            false
-                                    },
-                                    modifier =
-                                        Modifier.fillMaxWidth()
-                                ) {
-                                    Text(conta.nome)
-                                }
-
-                                Spacer(
-                                    modifier =
-                                        Modifier.height(6.dp)
-                                )
-                            }
-                    }
-                },
-
-                confirmButton = {},
-
-                dismissButton = {
-
-                    TextButton(
-                        onClick = {
-                            mostrarSelecaoContaDestino =
-                                false
-                        }
-                    ) {
-                        Text("Cancelar")
-                    }
-                }
-            )
-        }
-
-
-        // =====================================================
-        // POPUP - CATEGORIA
-        // =====================================================
-
-        if (mostrarSelecaoCategoria) {
-
-            AlertDialog(
-                onDismissRequest = {
-                    mostrarSelecaoCategoria = false
-                },
-
-                title = {
-                    Text("Selecionar categoria")
-                },
-
-                text = {
-
-                    Column {
-
-                        categorias.forEach { categoria ->
-
-                            Button(
-                                onClick = {
-
-                                    categoriaSelecionada =
-                                        categoria
-
-                                    mostrarSelecaoCategoria =
-                                        false
-                                },
-                                modifier =
-                                    Modifier.fillMaxWidth()
-                            ) {
-                                Text(categoria.nome)
-                            }
-
-                            Spacer(
-                                modifier =
-                                    Modifier.height(6.dp)
-                            )
-                        }
-                    }
-                },
-
-                confirmButton = {},
-
-                dismissButton = {
-
-                    TextButton(
-                        onClick = {
-                            mostrarSelecaoCategoria = false
-                        }
-                    ) {
-                        Text("Cancelar")
-                    }
-                }
-            )
-        }
-
-
-        // =====================================================
-        // POPUP - CARTÃO
-        // =====================================================
-
-        if (mostrarSelecaoCartao) {
-
-            AlertDialog(
-                onDismissRequest = {
-                    mostrarSelecaoCartao = false
-                },
-
-                title = {
-                    Text("Selecionar cartão")
-                },
-
-                text = {
-
-                    Column {
-
-                        cartoes.forEach { cartao ->
-
-                            Button(
-                                onClick = {
-
-                                    cartaoSelecionado =
-                                        cartao
-
-                                    mostrarSelecaoCartao =
-                                        false
-                                },
-                                modifier =
-                                    Modifier.fillMaxWidth()
-                            ) {
-                                Text(cartao.nome)
-                            }
-
-                            Spacer(
-                                modifier =
-                                    Modifier.height(6.dp)
-                            )
-                        }
-                    }
-                },
-
-                confirmButton = {},
-
-                dismissButton = {
-
-                    TextButton(
-                        onClick = {
-                            mostrarSelecaoCartao = false
-                        }
-                    ) {
-                        Text("Cancelar")
-                    }
-                }
-            )
-        }
-
-
-        // =====================================================
-        // POPUP - PARCELAS
-        // =====================================================
-
-        if (mostrarSelecaoParcelas) {
-
-            AlertDialog(
-                onDismissRequest = {
-                    mostrarSelecaoParcelas = false
-                },
-
-                title = {
-                    Text("Número de parcelas")
-                },
-
-                text = {
-
-                    LazyColumn {
-
-                        items(
-                            items = (1..24).toList()
-                        ) { numero ->
-
-                            Button(
-                                onClick = {
-
-                                    quantidadeParcelas =
-                                        numero.toString()
-
-                                    val atual =
-                                        parcelaAtual.toIntOrNull()
-                                            ?: 1
-
-                                    if (atual > numero) {
-                                        parcelaAtual =
-                                            numero.toString()
-                                    }
-
-                                    mostrarSelecaoParcelas =
-                                        false
-                                },
-                                modifier =
-                                    Modifier.fillMaxWidth()
-                            ) {
-
-                                Text(
-                                    text =
-                                        if (numero == 1) {
-                                            "1x - À vista"
-                                        } else {
-                                            "${numero}x"
-                                        }
-                                )
-                            }
-
-                            Spacer(
-                                modifier =
-                                    Modifier.height(6.dp)
-                            )
-                        }
-                    }
-                },
-
-                confirmButton = {},
-
-                dismissButton = {
-
-                    TextButton(
-                        onClick = {
-                            mostrarSelecaoParcelas = false
-                        }
-                    ) {
-                        Text("Cancelar")
-                    }
-                }
-            )
-        }
-
-        // =====================================================
-        // POPUP - PARCELA ATUAL
-        // =====================================================
-
-        if (mostrarSelecaoParcelaAtual) {
-
-            val totalParcelas =
-                quantidadeParcelas
-                    .toIntOrNull()
-                    ?: 1
-
-            AlertDialog(
-                onDismissRequest = {
-                    mostrarSelecaoParcelaAtual =
-                        false
-                },
-
-                title = {
-                    Text("Parcela atual")
-                },
-
-                text = {
-
-                    LazyColumn {
-
-                        items(
-                            items =
-                                (1..totalParcelas)
-                                    .toList()
-                        ) { numero ->
-
-                            Button(
-                                onClick = {
-
-                                    parcelaAtual =
-                                        numero.toString()
-
-                                    mostrarSelecaoParcelaAtual =
-                                        false
-                                },
-
-                                modifier =
-                                    Modifier.fillMaxWidth()
-                            ) {
-
-                                Text(
-                                    text =
-                                        "$numero/$totalParcelas"
-                                )
-                            }
-
-                            Spacer(
-                                modifier =
-                                    Modifier.height(6.dp)
-                            )
-                        }
-                    }
-                },
-
-                confirmButton = {},
-
-                dismissButton = {
-
-                    TextButton(
-                        onClick = {
-                            mostrarSelecaoParcelaAtual =
-                                false
-                        }
-                    ) {
-                        Text("Cancelar")
-                    }
-                }
-            )
-        }
-
 
         // =====================================================
         // CALENDÁRIO
@@ -2944,30 +3165,124 @@ fun TelaNovaMovimentacao(
 @Composable
 fun ContaItem(
     nome: String,
-    saldo: String
+    saldo: String,
+    onClick: () -> Unit
 ) {
 
     Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 4.dp)
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .padding(vertical = 5.dp)
+                .clickable {
+                    onClick()
+                },
+
+        shape =
+            androidx.compose.foundation.shape.RoundedCornerShape(
+                18.dp
+            ),
+
+        colors =
+            androidx.compose.material3.CardDefaults.cardColors(
+                containerColor =
+                    MaterialTheme.colorScheme.surface
+            ),
+
+        elevation =
+            androidx.compose.material3.CardDefaults.cardElevation(
+                defaultElevation = 2.dp
+            )
     ) {
 
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            horizontalArrangement = Arrangement.SpaceBetween
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .padding(
+                        horizontal = 16.dp,
+                        vertical = 14.dp
+                    ),
+
+            verticalAlignment =
+                androidx.compose.ui.Alignment.CenterVertically
         ) {
 
-            Text(
-                text = nome,
-                fontWeight = FontWeight.Medium
+            // ÍCONE DA CONTA
+            Box(
+                modifier =
+                    Modifier
+                        .size(46.dp)
+                        .background(
+                            color =
+                                MaterialTheme.colorScheme
+                                    .primaryContainer,
+
+                            shape =
+                                androidx.compose.foundation.shape
+                                    .CircleShape
+                        ),
+
+                contentAlignment =
+                    androidx.compose.ui.Alignment.Center
+            ) {
+
+                Text(
+                    text = "▣",
+                    fontSize = 22.sp,
+                    color =
+                        MaterialTheme.colorScheme.primary,
+                    fontWeight =
+                        FontWeight.Bold
+                )
+            }
+
+
+            Spacer(
+                modifier =
+                    Modifier.width(14.dp)
             )
 
+
+            // NOME DA CONTA
+            Column(
+                modifier =
+                    Modifier.weight(1f)
+            ) {
+
+                Text(
+                    text = nome,
+                    fontSize = 16.sp,
+                    fontWeight =
+                        FontWeight.SemiBold,
+                    color =
+                        MaterialTheme.colorScheme
+                            .onSurface
+                )
+
+                Spacer(
+                    modifier =
+                        Modifier.height(2.dp)
+                )
+
+                Text(
+                    text = "Conta",
+                    fontSize = 13.sp,
+                    color =
+                        MaterialTheme.colorScheme
+                            .onSurfaceVariant
+                )
+            }
+
+
+            // SALDO
             Text(
                 text = saldo,
-                fontWeight = FontWeight.Bold
+                fontSize = 16.sp,
+                fontWeight =
+                    FontWeight.Bold,
+                color =
+                    MaterialTheme.colorScheme.primary
             )
         }
     }
@@ -3033,9 +3348,46 @@ fun TelaContas(
         mutableStateOf<ContaEntity?>(null)
     }
 
+    var mostrarNovaConta by remember {
+        mutableStateOf(false)
+    }
+
+    var contaSelecionadaAcoes by remember {
+        mutableStateOf<ContaEntity?>(null)
+    }
+
     Scaffold(
         modifier = Modifier.fillMaxSize(),
-        containerColor = MaterialTheme.colorScheme.background
+
+        containerColor =
+            MaterialTheme.colorScheme.background,
+
+        floatingActionButton = {
+
+            androidx.compose.material3.FloatingActionButton(
+                onClick = {
+                    mensagem = ""
+                    mostrarNovaConta = true
+                },
+
+                containerColor =
+                    MaterialTheme.colorScheme.primary,
+
+                contentColor =
+                    MaterialTheme.colorScheme.onPrimary,
+
+                shape =
+                    androidx.compose.foundation.shape.CircleShape
+            ) {
+
+                Text(
+                    text = "+",
+                    fontSize = 28.sp,
+                    fontWeight = FontWeight.Medium
+                )
+            }
+        }
+
     ) { innerPadding ->
 
         LazyColumn(
@@ -3046,114 +3398,28 @@ fun TelaContas(
         ) {
 
             item {
+
                 Text(
-                    text = "Gerenciar contas",
+                    text = "Contas",
                     fontSize = 28.sp,
-                    fontWeight = FontWeight.Bold
+                    fontWeight = FontWeight.Bold,
+                    color =
+                        MaterialTheme.colorScheme.onBackground
+                )
+
+                Spacer(
+                    modifier = Modifier.height(4.dp)
+                )
+
+                Text(
+                    text = "Gerencie suas contas e saldos",
+                    fontSize = 14.sp,
+                    color =
+                        MaterialTheme.colorScheme.onSurfaceVariant
                 )
 
                 Spacer(
                     modifier = Modifier.height(20.dp)
-                )
-
-                OutlinedTextField(
-                    value = nomeNovaConta,
-
-                    onValueChange = {
-                        nomeNovaConta = it
-                        mensagem = ""
-                    },
-
-                    label = {
-                        Text("Nome da nova conta")
-                    },
-
-                    modifier = Modifier.fillMaxWidth()
-                )
-
-                Spacer(
-                    modifier = Modifier.height(12.dp)
-                )
-
-                OutlinedTextField(
-                    value = saldoInicialNovaConta,
-                    onValueChange = {
-                        saldoInicialNovaConta = it
-                        mensagem = ""
-                    },
-                    label = {
-                        Text("Saldo inicial")
-                    },
-                    placeholder = {
-                        Text("Ex.: 1500,00")
-                    },
-                    modifier = Modifier.fillMaxWidth()
-                )
-
-                Spacer(
-                    modifier = Modifier.height(12.dp)
-                )
-
-                Button(
-                    onClick = {
-                        val saldoConvertido =
-                            saldoInicialNovaConta
-                                .replace(",", "")
-                                .replace(",", ".")
-                                .toDoubleOrNull()
-
-                        if (nomeNovaConta.isBlank()) {
-                            mensagem =
-                                "Digite o nome da conta."
-                        } else if (saldoConvertido == null) {
-                            mensagem =
-                                "Digite um saldo inicial válido."
-                        } else {
-                            onAdicionarConta(
-                                nomeNovaConta,
-                                saldoConvertido
-                            ){ sucesso ->
-                                if (sucesso) {
-                                    mensagem =
-                                        "Conta adicionada."
-                                    nomeNovaConta = ""
-                                    saldoInicialNovaConta = ""
-                                } else {
-                                    mensagem =
-                                        "Já existe uma conta com esse nome."
-                                }
-                            }
-                        }
-                    },
-
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text("Adicionar conta")
-                }
-
-                if (mensagem.isNotBlank()) {
-
-                    Spacer(
-                        modifier = Modifier.height(8.dp)
-                    )
-
-                    Text(
-                        text = mensagem
-                    )
-                }
-
-                Spacer(
-                    modifier = Modifier.height(24.dp)
-                )
-
-                Text(
-                    text = "Contas cadastradas",
-                    fontSize = 20.sp,
-                    fontWeight = FontWeight.Bold
-                )
-
-                Spacer(
-                    modifier = Modifier.height(12.dp)
                 )
             }
 
@@ -3165,117 +3431,397 @@ fun TelaContas(
             ) { conta ->
 
                 Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 6.dp)
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 5.dp)
+                            .clickable {
+                                contaSelecionadaAcoes = conta
+                            },
+
+                    shape =
+                        androidx.compose.foundation.shape.RoundedCornerShape(
+                            18.dp
+                        ),
+
+                    colors =
+                        androidx.compose.material3.CardDefaults.cardColors(
+                            containerColor =
+                                MaterialTheme.colorScheme.surface
+                        ),
+
+                    elevation =
+                        androidx.compose.material3.CardDefaults.cardElevation(
+                            defaultElevation = 2.dp
+                        )
                 ) {
 
-                    Column(
-                        modifier = Modifier.padding(16.dp)
+                    Row(
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .padding(16.dp),
+
+                        horizontalArrangement =
+                            Arrangement.SpaceBetween,
+
+                        verticalAlignment =
+                            androidx.compose.ui.Alignment.CenterVertically
                     ) {
 
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement =
-                                Arrangement.SpaceBetween
+                        Column(
+                            modifier =
+                                Modifier.weight(1f)
                         ) {
 
                             Text(
                                 text = conta.nome,
-                                fontWeight = FontWeight.Bold
+                                fontSize = 17.sp,
+                                fontWeight =
+                                    FontWeight.SemiBold
+                            )
+
+                            Spacer(
+                                modifier =
+                                    Modifier.height(4.dp)
                             )
 
                             Text(
                                 text =
-                                "Saldo inicial: ${formatarDinheiro(conta.saldoInicial)}"
+                                    "Saldo inicial: " +
+                                            formatarDinheiro(
+                                                conta.saldoInicial
+                                            ),
+
+                                fontSize = 13.sp,
+
+                                color =
+                                    MaterialTheme.colorScheme
+                                        .onSurfaceVariant
                             )
+                        }
+
+
+                        Box(
+                            modifier =
+                                Modifier.background(
+                                    color =
+                                        if (conta.ativa) {
+                                            BlikEntradaContainer
+                                        } else {
+                                            MaterialTheme.colorScheme
+                                                .surfaceVariant
+                                        },
+
+                                    shape =
+                                        androidx.compose.foundation.shape
+                                            .RoundedCornerShape(
+                                                50.dp
+                                            )
+                                )
+                        ) {
 
                             Text(
                                 text =
                                     if (conta.ativa) {
-                                        "Ativa"
+                                        "ATIVA"
                                     } else {
-                                        "Desativada"
+                                        "DESATIVADA"
+                                    },
+
+                                modifier =
+                                    Modifier.padding(
+                                        horizontal = 10.dp,
+                                        vertical = 4.dp
+                                    ),
+
+                                fontSize = 11.sp,
+
+                                fontWeight =
+                                    FontWeight.Bold,
+
+                                color =
+                                    if (conta.ativa) {
+                                        BlikPrimary
+                                    } else {
+                                        MaterialTheme.colorScheme
+                                            .onSurfaceVariant
                                     }
                             )
                         }
+                    }
+                }
+            }
+            }
+        }
+
+    // =====================================================
+// NOVA CONTA
+// =====================================================
+
+    if (mostrarNovaConta) {
+
+        AlertDialog(
+            onDismissRequest = {
+                mostrarNovaConta = false
+                mensagem = ""
+            },
+
+            title = {
+                Text(
+                    text = "Nova conta",
+                    fontWeight = FontWeight.Bold
+                )
+            },
+
+            text = {
+
+                Column {
+
+                    OutlinedTextField(
+                        value = nomeNovaConta,
+
+                        onValueChange = {
+                            nomeNovaConta = it
+                            mensagem = ""
+                        },
+
+                        label = {
+                            Text("Nome da conta")
+                        },
+
+                        singleLine = true,
+
+                        modifier =
+                            Modifier.fillMaxWidth()
+                    )
+
+
+                    Spacer(
+                        modifier =
+                            Modifier.height(12.dp)
+                    )
+
+
+                    OutlinedTextField(
+                        value =
+                            saldoInicialNovaConta,
+
+                        onValueChange = {
+                            saldoInicialNovaConta = it
+                            mensagem = ""
+                        },
+
+                        label = {
+                            Text("Saldo inicial")
+                        },
+
+                        placeholder = {
+                            Text("Ex.: 1.500,00")
+                        },
+
+                        singleLine = true,
+
+                        modifier =
+                            Modifier.fillMaxWidth()
+                    )
+
+
+                    if (mensagem.isNotBlank()) {
 
                         Spacer(
-                            modifier = Modifier.height(12.dp)
+                            modifier =
+                                Modifier.height(10.dp)
                         )
 
-                        Button(
-                            onClick = {
-                                contaParaEditar = conta
-                                novoNomeConta = conta.nome
-                                novoSaldoInicial =
-                                    conta.saldoInicial
-                                        .toString()
-                                        .replace(".", ",")
-                                mensagemEdicao = ""
-                            },
-                            modifier = Modifier.fillMaxWidth()
+                        Text(
+                            text = mensagem,
+                            fontSize = 13.sp,
+                            color =
+                                MaterialTheme.colorScheme.error
+                        )
+                    }
+                }
+            },
+
+            confirmButton = {
+
+                TextButton(
+                    onClick = {
+
+                        val saldoConvertido =
+                            saldoInicialNovaConta
+                                .replace(".", "")
+                                .replace(",", ".")
+                                .toDoubleOrNull()
+
+
+                        if (nomeNovaConta.isBlank()) {
+
+                            mensagem =
+                                "Digite o nome da conta."
+
+                        } else if (
+                            saldoConvertido == null
                         ) {
-                            Text("Editar")
-                        }
 
-                        Spacer(
-                            modifier = Modifier.height(8.dp)
-                        )
-
-                        if (conta.ativa) {
-
-                            Button(
-                                onClick = {
-                                    onDesativar(conta)
-                                },
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Text("Desativar")
-                            }
+                            mensagem =
+                                "Digite um saldo inicial válido."
 
                         } else {
 
-                            Button(
-                                onClick = {
-                                    onReativar(conta)
-                                },
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Text("Reativar")
+                            onAdicionarConta(
+                                nomeNovaConta,
+                                saldoConvertido
+                            ) { sucesso ->
+
+                                if (sucesso) {
+
+                                    nomeNovaConta = ""
+                                    saldoInicialNovaConta = ""
+                                    mensagem = ""
+
+                                    mostrarNovaConta =
+                                        false
+
+                                } else {
+
+                                    mensagem =
+                                        "Já existe uma conta com esse nome."
+                                }
                             }
                         }
-
-                        Spacer(
-                            modifier = Modifier.height(8.dp)
-                        )
-
-                        Button(
-                            onClick = {
-                                contaParaExcluir = conta
-                            },
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Text("Excluir definitivamente")
-                        }
                     }
-                }
-            }
-
-            item {
-                Spacer(
-                    modifier = Modifier.height(24.dp)
-                )
-
-                Button(
-                    onClick = onVoltar,
-                    modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text("Voltar")
+
+                    Text("Adicionar")
+                }
+            },
+
+            dismissButton = {
+
+                TextButton(
+                    onClick = {
+                        mostrarNovaConta = false
+                        mensagem = ""
                     }
+                ) {
+
+                    Text("Cancelar")
                 }
             }
-        }
+        )
+    }
+
+    contaSelecionadaAcoes?.let { conta ->
+
+        AlertDialog(
+            onDismissRequest = {
+                contaSelecionadaAcoes = null
+            },
+
+            title = {
+                Text(
+                    text = conta.nome,
+                    fontWeight = FontWeight.Bold
+                )
+            },
+
+            text = {
+
+                Column {
+
+                    TextButton(
+                        onClick = {
+
+                            contaSelecionadaAcoes = null
+
+                            contaParaEditar = conta
+
+                            novoNomeConta =
+                                conta.nome
+
+                            novoSaldoInicial =
+                                conta.saldoInicial
+                                    .toString()
+                                    .replace(".", ",")
+
+                            mensagemEdicao = ""
+                        },
+
+                        modifier =
+                            Modifier.fillMaxWidth()
+                    ) {
+
+                        Text("Editar")
+                    }
+
+
+                    TextButton(
+                        onClick = {
+
+                            contaSelecionadaAcoes =
+                                null
+
+                            if (conta.ativa) {
+                                onDesativar(conta)
+                            } else {
+                                onReativar(conta)
+                            }
+                        },
+
+                        modifier =
+                            Modifier.fillMaxWidth()
+                    ) {
+
+                        Text(
+                            if (conta.ativa) {
+                                "Desativar"
+                            } else {
+                                "Reativar"
+                            }
+                        )
+                    }
+
+
+                    TextButton(
+                        onClick = {
+
+                            contaSelecionadaAcoes =
+                                null
+
+                            contaParaExcluir =
+                                conta
+                        },
+
+                        modifier =
+                            Modifier.fillMaxWidth()
+                    ) {
+
+                        Text(
+                            text = "Excluir",
+                            color =
+                                MaterialTheme.colorScheme.error
+                        )
+                    }
+                }
+            },
+
+            confirmButton = {},
+
+            dismissButton = {
+
+                TextButton(
+                    onClick = {
+                        contaSelecionadaAcoes = null
+                    }
+                ) {
+
+                    Text("Cancelar")
+                }
+            }
+        )
+    }
 
     contaParaExcluir?.let { conta ->
         AlertDialog(
@@ -3562,6 +4108,12 @@ fun TelaCartoes(
     var mensagemEdicao by remember {
         mutableStateOf("")
     }
+    var mostrarNovoCartao by remember {
+        mutableStateOf(false)
+    }
+    var cartaoSelecionadoAcoes by remember {
+        mutableStateOf<CartaoComConta?>(null)
+    }
 
 
     LaunchedEffect(contas) {
@@ -3574,7 +4126,41 @@ fun TelaCartoes(
     }
     Scaffold(
         modifier = Modifier.fillMaxSize(),
-        containerColor = MaterialTheme.colorScheme.background
+
+        containerColor =
+            MaterialTheme.colorScheme.background,
+
+        floatingActionButton = {
+
+            androidx.compose.material3.FloatingActionButton(
+                onClick = {
+                    mensagem = ""
+
+                    if (contaSelecionada == null && contas.isNotEmpty()) {
+                        contaSelecionada = contas.first()
+                    }
+
+                    mostrarNovoCartao = true
+                },
+
+                containerColor =
+                    MaterialTheme.colorScheme.primary,
+
+                contentColor =
+                    MaterialTheme.colorScheme.onPrimary,
+
+                shape =
+                    androidx.compose.foundation.shape.CircleShape
+            ) {
+
+                Text(
+                    text = "+",
+                    fontSize = 28.sp,
+                    fontWeight = FontWeight.Medium
+                )
+            }
+        }
+
     ) { innerPadding ->
 
         LazyColumn(
@@ -3587,237 +4173,23 @@ fun TelaCartoes(
             item {
 
                 Text(
-                    text = "Gerenciar cartões",
+                    text = "Cartões",
                     fontSize = 28.sp,
-                    fontWeight = FontWeight.Bold
-                )
-                Spacer(
-                    modifier = Modifier.height(20.dp)
-                )
-
-                OutlinedTextField(
-                    value = nomeCartao,
-                    onValueChange = {
-                        nomeCartao = it
-                        mensagem = ""
-                    },
-                    label = {
-                        Text("Nome do cartão")
-                    },
-                    modifier = Modifier.fillMaxWidth()
+                    fontWeight = FontWeight.Bold,
+                    color =
+                        MaterialTheme.colorScheme.onBackground
                 )
 
                 Spacer(
-                    modifier = Modifier.height(12.dp)
-                )
-
-                OutlinedTextField(
-                    value = limiteCartao,
-                    onValueChange = {
-                        limiteCartao = it
-                        mensagem = ""
-                    },
-                    label = {
-                        Text("Limite")
-                    },
-                    placeholder = {
-                        Text("Ex.: 5000,00")
-                    },
-                    modifier = Modifier.fillMaxWidth()
-                )
-
-                Spacer(
-                    modifier = Modifier.height(12.dp)
-                )
-
-                OutlinedTextField(
-                    value = fechamentoCartao,
-                    onValueChange = {
-                        fechamentoCartao = it
-                        mensagem = ""
-                    },
-                    label = {
-                        Text("Dia de fechamento")
-                    },
-                    placeholder = {
-                        Text("Ex.: 10")
-                    },
-                    modifier = Modifier.fillMaxWidth()
-                )
-
-                Spacer(
-                    modifier = Modifier.height(12.dp)
-                )
-
-                OutlinedTextField(
-                    value = vencimentoCartao,
-                    onValueChange = {
-                        vencimentoCartao = it
-                        mensagem = ""
-                    },
-                    label = {
-                        Text("Dia de vencimento")
-                    },
-                    placeholder = {
-                        Text("Ex.: 17")
-                    },
-                    modifier = Modifier.fillMaxWidth()
-                )
-
-                Spacer(
-                    modifier = Modifier.height(12.dp)
-                )
-                Box(
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-
-                    Button(
-                        onClick = {
-                            menuContaAberto = true
-                        },
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-
-                        Text(
-                            text =
-                                "Conta: ${contaSelecionada?.nome ?: "Selecione"}"
-                        )
-                    }
-
-                    DropdownMenu(
-                        expanded = menuContaAberto,
-                        onDismissRequest = {
-                            menuContaAberto = false
-                        }
-                    ) {
-
-                        contas.forEach { conta ->
-
-                            DropdownMenuItem(
-                                text = {
-                                    Text(conta.nome)
-                                },
-                                onClick = {
-                                    contaSelecionada = conta
-                                    menuContaAberto = false
-                                }
-                            )
-                        }
-                    }
-                }
-
-                Spacer(
-                    modifier = Modifier.height(16.dp)
-                )
-
-                Button(
-                    onClick = {
-
-                        val limiteConvertido =
-                            limiteCartao
-                                .replace(".", "")
-                                .replace(",", ".")
-                                .toDoubleOrNull()
-
-                        val fechamentoConvertido =
-                            fechamentoCartao.toIntOrNull()
-
-                        val vencimentoConvertido =
-                            vencimentoCartao.toIntOrNull()
-
-                        val contaEscolhida =
-                            contaSelecionada
-
-                        if (nomeCartao.isBlank()) {
-
-                            mensagem =
-                                "Digite o nome do cartão."
-
-                        } else if (limiteConvertido == null) {
-
-                            mensagem =
-                                "Digite um limite válido."
-
-                        } else if (
-                            fechamentoConvertido == null ||
-                            fechamentoConvertido !in 1..31
-                        ) {
-
-                            mensagem =
-                                "O dia de fechamento deve estar entre 1 e 31."
-
-                        } else if (
-                            vencimentoConvertido == null ||
-                            vencimentoConvertido !in 1..31
-                        ) {
-
-                            mensagem =
-                                "O dia de vencimento deve estar entre 1 e 31."
-
-                        } else if (contaEscolhida == null) {
-
-                            mensagem =
-                                "Selecione uma conta."
-
-                        } else {
-
-                            onAdicionar(
-                                nomeCartao,
-                                limiteConvertido,
-                                fechamentoConvertido,
-                                vencimentoConvertido,
-                                contaEscolhida.id
-                            ) { sucesso ->
-
-                                if (sucesso) {
-
-                                    mensagem =
-                                        "Cartão cadastrado com sucesso."
-
-                                    nomeCartao = ""
-                                    limiteCartao = ""
-                                    fechamentoCartao = ""
-                                    vencimentoCartao = ""
-
-                                } else {
-
-                                    mensagem =
-                                        "Já existe um cartão com esse nome."
-                                }
-                            }
-                        }
-                    },
-
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-
-                    Text("Adicionar cartão")
-                }
-                if (mensagem.isNotBlank()) {
-
-                    Spacer(
-                        modifier = Modifier.height(8.dp)
-                    )
-
-                    Text(
-                        text = mensagem
-                    )
-                }
-                Spacer(
-                    modifier = Modifier.height(28.dp)
+                    modifier = Modifier.height(4.dp)
                 )
 
                 Text(
-                    text = "Cartões cadastrados",
-                    fontSize = 20.sp,
-                    fontWeight = FontWeight.Bold
+                    text = "Gerencie seus cartões e limites",
+                    fontSize = 14.sp,
+                    color =
+                        MaterialTheme.colorScheme.onSurfaceVariant
                 )
-
-                Spacer(
-                    modifier = Modifier.height(12.dp)
-                )
-
-
 
                 Spacer(
                     modifier = Modifier.height(20.dp)
@@ -3847,100 +4219,594 @@ fun TelaCartoes(
                 ) { cartao ->
 
                     Card(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 6.dp)
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 5.dp)
+                                .clickable {
+                                    cartaoSelecionadoAcoes = cartao
+                                },
+
+                        shape =
+                            androidx.compose.foundation.shape.RoundedCornerShape(
+                                18.dp
+                            ),
+
+                        colors =
+                            androidx.compose.material3.CardDefaults.cardColors(
+                                containerColor =
+                                    MaterialTheme.colorScheme.surface
+                            ),
+
+                        elevation =
+                            androidx.compose.material3.CardDefaults.cardElevation(
+                                defaultElevation = 2.dp
+                            )
                     ) {
 
                         Column(
-                            modifier = Modifier.padding(16.dp)
+                            modifier =
+                                Modifier.padding(16.dp)
                         ) {
 
-                            Text(
-                                text = cartao.nome,
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 18.sp
+                            // CABEÇALHO
+                            Row(
+                                modifier =
+                                    Modifier.fillMaxWidth(),
+
+                                verticalAlignment =
+                                    androidx.compose.ui.Alignment.CenterVertically
+                            ) {
+
+                                Box(
+                                    modifier =
+                                        Modifier
+                                            .size(42.dp)
+                                            .background(
+                                                color =
+                                                    MaterialTheme.colorScheme
+                                                        .primaryContainer,
+
+                                                shape =
+                                                    androidx.compose.foundation.shape
+                                                        .CircleShape
+                                            ),
+
+                                    contentAlignment =
+                                        androidx.compose.ui.Alignment.Center
+                                ) {
+
+                                    Text(
+                                        text =
+                                            cartao.nome
+                                                .take(1)
+                                                .uppercase(),
+
+                                        fontSize = 17.sp,
+                                        fontWeight =
+                                            FontWeight.Bold,
+
+                                        color =
+                                            MaterialTheme.colorScheme.primary
+                                    )
+                                }
+
+
+                                Spacer(
+                                    modifier =
+                                        Modifier.width(12.dp)
+                                )
+
+
+                                Column(
+                                    modifier =
+                                        Modifier.weight(1f)
+                                ) {
+
+                                    Text(
+                                        text = cartao.nome,
+                                        fontSize = 17.sp,
+                                        fontWeight =
+                                            FontWeight.SemiBold
+                                    )
+
+                                    Spacer(
+                                        modifier =
+                                            Modifier.height(2.dp)
+                                    )
+
+                                    Text(
+                                        text =
+                                            "Conta: ${cartao.contaNome}",
+
+                                        fontSize = 13.sp,
+
+                                        color =
+                                            MaterialTheme.colorScheme
+                                                .onSurfaceVariant
+                                    )
+                                }
+                            }
+
+
+                            Spacer(
+                                modifier =
+                                    Modifier.height(16.dp)
+                            )
+
+
+                            // LIMITE
+                            Row(
+                                modifier =
+                                    Modifier.fillMaxWidth(),
+
+                                horizontalArrangement =
+                                    Arrangement.SpaceBetween,
+
+                                verticalAlignment =
+                                    androidx.compose.ui.Alignment.CenterVertically
+                            ) {
+
+                                Text(
+                                    text = "Limite",
+                                    fontSize = 13.sp,
+                                    color =
+                                        MaterialTheme.colorScheme
+                                            .onSurfaceVariant
+                                )
+
+                                Text(
+                                    text =
+                                        formatarDinheiro(
+                                            cartao.limite
+                                        ),
+
+                                    fontSize = 17.sp,
+                                    fontWeight =
+                                        FontWeight.Bold,
+
+                                    color =
+                                        MaterialTheme.colorScheme.primary
+                                )
+                            }
+
+
+                            Spacer(
+                                modifier =
+                                    Modifier.height(12.dp)
+                            )
+
+
+                            // FECHAMENTO E VENCIMENTO
+                            Row(
+                                modifier =
+                                    Modifier.fillMaxWidth(),
+
+                                horizontalArrangement =
+                                    Arrangement.SpaceBetween
+                            ) {
+
+                                Text(
+                                    text =
+                                        "Fecha dia ${cartao.diaFechamento}",
+
+                                    fontSize = 13.sp,
+                                    color =
+                                        MaterialTheme.colorScheme
+                                            .onSurfaceVariant
+                                )
+
+                                Text(
+                                    text =
+                                        "Vence dia ${cartao.diaVencimento}",
+
+                                    fontSize = 13.sp,
+                                    color =
+                                        MaterialTheme.colorScheme
+                                            .onSurfaceVariant
+                                )
+                            }
+                        }
+                    }
+                    }
+
+            }
+        }
+
+        if (mostrarNovoCartao) {
+
+            AlertDialog(
+                onDismissRequest = {
+                    mostrarNovoCartao = false
+                    mensagem = ""
+                    menuContaAberto = false
+                },
+
+                title = {
+                    Text(
+                        text = "Novo cartão",
+                        fontWeight = FontWeight.Bold
+                    )
+                },
+
+                text = {
+
+                    Column {
+
+                        OutlinedTextField(
+                            value = nomeCartao,
+
+                            onValueChange = {
+                                nomeCartao = it
+                                mensagem = ""
+                            },
+
+                            label = {
+                                Text("Nome do cartão")
+                            },
+
+                            singleLine = true,
+
+                            modifier =
+                                Modifier.fillMaxWidth()
+                        )
+
+                        Spacer(
+                            modifier = Modifier.height(12.dp)
+                        )
+
+                        OutlinedTextField(
+                            value = limiteCartao,
+
+                            onValueChange = {
+                                limiteCartao = it
+                                mensagem = ""
+                            },
+
+                            label = {
+                                Text("Limite")
+                            },
+
+                            placeholder = {
+                                Text("Ex.: 5.000,00")
+                            },
+
+                            singleLine = true,
+
+                            modifier =
+                                Modifier.fillMaxWidth()
+                        )
+
+                        Spacer(
+                            modifier = Modifier.height(12.dp)
+                        )
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+
+                            OutlinedTextField(
+                                value = fechamentoCartao,
+
+                                onValueChange = {
+                                    fechamentoCartao = it
+                                    mensagem = ""
+                                },
+
+                                label = {
+                                    Text("Fechamento")
+                                },
+
+                                placeholder = {
+                                    Text("10")
+                                },
+
+                                singleLine = true,
+
+                                modifier =
+                                    Modifier.weight(1f)
                             )
 
                             Spacer(
-                                modifier = Modifier.height(8.dp)
+                                modifier = Modifier.width(10.dp)
+                            )
+
+                            OutlinedTextField(
+                                value = vencimentoCartao,
+
+                                onValueChange = {
+                                    vencimentoCartao = it
+                                    mensagem = ""
+                                },
+
+                                label = {
+                                    Text("Vencimento")
+                                },
+
+                                placeholder = {
+                                    Text("17")
+                                },
+
+                                singleLine = true,
+
+                                modifier =
+                                    Modifier.weight(1f)
+                            )
+                        }
+
+                        Spacer(
+                            modifier = Modifier.height(12.dp)
+                        )
+
+                        Box(
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+
+                            androidx.compose.material3.OutlinedButton(
+                                onClick = {
+                                    menuContaAberto = true
+                                },
+
+                                modifier =
+                                    Modifier.fillMaxWidth()
+                            ) {
+
+                                Text(
+                                    text =
+                                        "Conta: ${
+                                            contaSelecionada?.nome
+                                                ?: "Selecione"
+                                        }"
+                                )
+                            }
+
+                            DropdownMenu(
+                                expanded = menuContaAberto,
+
+                                onDismissRequest = {
+                                    menuContaAberto = false
+                                }
+                            ) {
+
+                                contas.forEach { conta ->
+
+                                    DropdownMenuItem(
+                                        text = {
+                                            Text(conta.nome)
+                                        },
+
+                                        onClick = {
+                                            contaSelecionada = conta
+                                            menuContaAberto = false
+                                            mensagem = ""
+                                        }
+                                    )
+                                }
+                            }
+                        }
+
+
+                        if (mensagem.isNotBlank()) {
+
+                            Spacer(
+                                modifier = Modifier.height(10.dp)
                             )
 
                             Text(
-                                text = "Limite: ${formatarDinheiro(cartao.limite)}"
-                            )
-
-                            Text(
-                                text = "Conta: ${cartao.contaNome}"
-                            )
-
-                            Text(
-                                text = "Fecha dia ${cartao.diaFechamento}"
-                            )
-
-                            Text(
-                                text = "Vence dia ${cartao.diaVencimento}"
+                                text = mensagem,
+                                fontSize = 13.sp,
+                                color =
+                                    MaterialTheme.colorScheme.error
                             )
                         }
                     }
-                    Spacer(
-                        modifier = Modifier.height(12.dp)
-                    )
-                    Button(
+                },
+
+                confirmButton = {
+
+                    TextButton(
                         onClick = {
-                            cartaoParaEditar = cartao
-                            novoNomeCartao = cartao.nome
-                            novoLimiteCartao =
-                                cartao.limite
-                                    .toString()
-                                    .replace(".",",")
-                            novoFechamentoCartao =
-                                cartao.diaFechamento.toString()
-                            novoVencimentoCartao =
-                                cartao.diaVencimento.toString()
-                            novaContaCartao =
-                                contas.find {
-                                    it.id == cartao.contaId
+
+                            val limiteConvertido =
+                                limiteCartao
+                                    .replace(".", "")
+                                    .replace(",", ".")
+                                    .toDoubleOrNull()
+
+                            val fechamentoConvertido =
+                                fechamentoCartao.toIntOrNull()
+
+                            val vencimentoConvertido =
+                                vencimentoCartao.toIntOrNull()
+
+                            val contaEscolhida =
+                                contaSelecionada
+
+
+                            if (nomeCartao.isBlank()) {
+
+                                mensagem =
+                                    "Digite o nome do cartão."
+
+                            } else if (
+                                limiteConvertido == null
+                            ) {
+
+                                mensagem =
+                                    "Digite um limite válido."
+
+                            } else if (
+                                fechamentoConvertido == null ||
+                                fechamentoConvertido !in 1..31
+                            ) {
+
+                                mensagem =
+                                    "O dia de fechamento deve estar entre 1 e 31."
+
+                            } else if (
+                                vencimentoConvertido == null ||
+                                vencimentoConvertido !in 1..31
+                            ) {
+
+                                mensagem =
+                                    "O dia de vencimento deve estar entre 1 e 31."
+
+                            } else if (
+                                contaEscolhida == null
+                            ) {
+
+                                mensagem =
+                                    "Selecione uma conta."
+
+                            } else {
+
+                                onAdicionar(
+                                    nomeCartao,
+                                    limiteConvertido,
+                                    fechamentoConvertido,
+                                    vencimentoConvertido,
+                                    contaEscolhida.id
+                                ) { sucesso ->
+
+                                    if (sucesso) {
+
+                                        nomeCartao = ""
+                                        limiteCartao = ""
+                                        fechamentoCartao = ""
+                                        vencimentoCartao = ""
+                                        mensagem = ""
+
+                                        mostrarNovoCartao = false
+
+                                    } else {
+
+                                        mensagem =
+                                            "Já existe um cartão com esse nome."
+                                    }
                                 }
-                            mensagemEdicao = ""
-                        },
-                        modifier = Modifier.fillMaxWidth()
+                            }
+                        }
                     ) {
-                        Text("Editar")
+
+                        Text("Adicionar")
                     }
+                },
 
-                    Spacer(
-                        modifier = Modifier.height(8.dp)
-                    )
+                dismissButton = {
 
-                    Button(
+                    TextButton(
                         onClick = {
-                            cartaoParaExcluir = cartao
-                        },
-                        modifier = Modifier.fillMaxWidth()
+                            mostrarNovoCartao = false
+                            mensagem = ""
+                            menuContaAberto = false
+                        }
                     ) {
-                        Text("Excluir")
+
+                        Text("Cancelar")
                     }
                 }
-            }
+            )
+        }
 
-            item {
+        cartaoSelecionadoAcoes?.let { cartao ->
 
-                Spacer(
-                    modifier = Modifier.height(20.dp)
-                )
+            AlertDialog(
+                onDismissRequest = {
+                    cartaoSelecionadoAcoes = null
+                },
 
-                Button(
-                    onClick = onVoltar,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text("Voltar")
+                title = {
+
+                    Text(
+                        text = cartao.nome,
+                        fontWeight = FontWeight.Bold
+                    )
+                },
+
+                text = {
+
+                    Column {
+
+                        TextButton(
+                            onClick = {
+
+                                cartaoSelecionadoAcoes =
+                                    null
+
+                                cartaoParaEditar =
+                                    cartao
+
+                                novoNomeCartao =
+                                    cartao.nome
+
+                                novoLimiteCartao =
+                                    cartao.limite
+                                        .toString()
+                                        .replace(".", ",")
+
+                                novoFechamentoCartao =
+                                    cartao.diaFechamento
+                                        .toString()
+
+                                novoVencimentoCartao =
+                                    cartao.diaVencimento
+                                        .toString()
+
+                                novaContaCartao =
+                                    contas.find {
+                                        it.id ==
+                                                cartao.contaId
+                                    }
+
+                                mensagemEdicao = ""
+                            },
+
+                            modifier =
+                                Modifier.fillMaxWidth()
+                        ) {
+
+                            Text("Editar")
+                        }
+
+
+                        TextButton(
+                            onClick = {
+
+                                cartaoSelecionadoAcoes =
+                                    null
+
+                                cartaoParaExcluir =
+                                    cartao
+                            },
+
+                            modifier =
+                                Modifier.fillMaxWidth()
+                        ) {
+
+                            Text(
+                                text = "Excluir",
+                                color =
+                                    MaterialTheme.colorScheme.error
+                            )
+                        }
+                    }
+                },
+
+                confirmButton = {},
+
+                dismissButton = {
+
+                    TextButton(
+                        onClick = {
+                            cartaoSelecionadoAcoes =
+                                null
+                        }
+                    ) {
+
+                        Text("Cancelar")
+                    }
                 }
-
-                Spacer(
-                    modifier = Modifier.height(24.dp)
-                )
-            }
+            )
         }
 
         cartaoParaEditar?.let { cartao ->
@@ -4267,9 +5133,45 @@ fun TelaCategorias(
     var mensagemExclusao by remember {
         mutableStateOf("")
     }
+    var mostrarNovaCategoria by remember {
+        mutableStateOf(false)
+    }
+    var categoriaSelecionadaAcoes by remember {
+        mutableStateOf<CategoriaEntity?>(null)
+    }
 
     Scaffold(
-        modifier = Modifier.fillMaxSize()
+        modifier = Modifier.fillMaxSize(),
+
+        containerColor =
+            MaterialTheme.colorScheme.background,
+
+        floatingActionButton = {
+
+            androidx.compose.material3.FloatingActionButton(
+                onClick = {
+                    mensagem = ""
+                    mostrarNovaCategoria = true
+                },
+
+                containerColor =
+                    MaterialTheme.colorScheme.primary,
+
+                contentColor =
+                    MaterialTheme.colorScheme.onPrimary,
+
+                shape =
+                    androidx.compose.foundation.shape.CircleShape
+            ) {
+
+                Text(
+                    text = "+",
+                    fontSize = 28.sp,
+                    fontWeight = FontWeight.Medium
+                )
+            }
+        }
+
     ) { innerPadding ->
 
         LazyColumn(
@@ -4279,36 +5181,154 @@ fun TelaCategorias(
                 .fillMaxSize()
         ) {
             item {
+
                 Text(
-                    text = "Gerenciar categorias",
+                    text = "Categorias",
                     fontSize = 28.sp,
-                    fontWeight = FontWeight.Bold
+                    fontWeight = FontWeight.Bold,
+                    color =
+                        MaterialTheme.colorScheme.onBackground
+                )
+
+                Spacer(
+                    modifier = Modifier.height(4.dp)
+                )
+
+                Text(
+                    text = "Organize suas movimentações",
+                    fontSize = 14.sp,
+                    color =
+                        MaterialTheme.colorScheme.onSurfaceVariant
                 )
 
                 Spacer(
                     modifier = Modifier.height(20.dp)
                 )
+            }
 
-                OutlinedTextField(
-                    value = nomeNovaCategoria,
+            items(
+                items = categorias,
+                key = { categoria ->
+                    categoria.id
+                }
+            ) { categoria ->
 
-                    onValueChange = {
-                        nomeNovaCategoria = it
-                        mensagem = ""
-                    },
+                Card(
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 5.dp)
+                            .clickable {
+                                categoriaSelecionadaAcoes =
+                                    categoria
+                            },
 
-                    label = {
-                        Text("Nova categoria")
-                    },
+                    shape =
+                        androidx.compose.foundation.shape.RoundedCornerShape(
+                            18.dp
+                        ),
 
-                    modifier = Modifier.fillMaxWidth()
+                    colors =
+                        androidx.compose.material3.CardDefaults.cardColors(
+                            containerColor =
+                                MaterialTheme.colorScheme.surface
+                        ),
+
+                    elevation =
+                        androidx.compose.material3.CardDefaults.cardElevation(
+                            defaultElevation = 2.dp
+                        )
+                ) {
+
+                    Row(
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .padding(
+                                    horizontal = 16.dp,
+                                    vertical = 14.dp
+                                ),
+
+                        verticalAlignment =
+                            androidx.compose.ui.Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = categoria.nome,
+
+                            modifier =
+                                Modifier.weight(1f),
+
+                            fontSize = 16.sp,
+
+                            fontWeight =
+                                FontWeight.SemiBold,
+
+                            color =
+                                MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    if (mostrarNovaCategoria) {
+
+        AlertDialog(
+            onDismissRequest = {
+                mostrarNovaCategoria = false
+                mensagem = ""
+            },
+
+            title = {
+                Text(
+                    text = "Nova categoria",
+                    fontWeight = FontWeight.Bold
                 )
+            },
 
-                Spacer(
-                    modifier = Modifier.height(12.dp)
-                )
+            text = {
 
-                Button(
+                Column {
+
+                    OutlinedTextField(
+                        value = nomeNovaCategoria,
+
+                        onValueChange = {
+                            nomeNovaCategoria = it
+                            mensagem = ""
+                        },
+
+                        label = {
+                            Text("Nome da categoria")
+                        },
+
+                        singleLine = true,
+
+                        modifier =
+                            Modifier.fillMaxWidth()
+                    )
+
+
+                    if (mensagem.isNotBlank()) {
+
+                        Spacer(
+                            modifier = Modifier.height(10.dp)
+                        )
+
+                        Text(
+                            text = mensagem,
+                            fontSize = 13.sp,
+                            color =
+                                MaterialTheme.colorScheme.error
+                        )
+                    }
+                }
+            },
+
+            confirmButton = {
+
+                TextButton(
                     onClick = {
 
                         if (nomeNovaCategoria.isBlank()) {
@@ -4324,10 +5344,9 @@ fun TelaCategorias(
 
                                 if (sucesso) {
 
-                                    mensagem =
-                                        "Categoria adicionada."
-
                                     nomeNovaCategoria = ""
+                                    mensagem = ""
+                                    mostrarNovaCategoria = false
 
                                 } else {
 
@@ -4336,111 +5355,107 @@ fun TelaCategorias(
                                 }
                             }
                         }
-                    },
-
-                    modifier = Modifier.fillMaxWidth()
+                    }
                 ) {
-                    Text("Adicionar categoria")
+
+                    Text("Adicionar")
                 }
+            },
 
-                if (mensagem.isNotBlank()) {
+            dismissButton = {
 
-                    Spacer(
-                        modifier = Modifier.height(8.dp)
-                    )
+                TextButton(
+                    onClick = {
+                        mostrarNovaCategoria = false
+                        mensagem = ""
+                    }
+                ) {
 
-                    Text(mensagem)
+                    Text("Cancelar")
                 }
+            }
+        )
+    }
 
-                Spacer(
-                    modifier = Modifier.height(24.dp)
-                )
+    categoriaSelecionadaAcoes?.let { categoria ->
 
+        AlertDialog(
+            onDismissRequest = {
+                categoriaSelecionadaAcoes = null
+            },
+
+            title = {
                 Text(
-                    text = "Categorias",
-                    fontSize = 20.sp,
+                    text = categoria.nome,
                     fontWeight = FontWeight.Bold
                 )
+            },
 
-                Spacer(
-                    modifier = Modifier.height(12.dp)
-                )
-            }
+            text = {
 
-            items(
-                items = categorias,
-                key = { categoria ->
-                    categoria.id
-                }
-            ) { categoria ->
+                Column {
 
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 6.dp)
-                ) {
+                    TextButton(
+                        onClick = {
 
-                    Column(
-                        modifier = Modifier.padding(16.dp)
+                            categoriaSelecionadaAcoes =
+                                null
+
+                            categoriaParaEditar =
+                                categoria
+
+                            novoNomeCategoria =
+                                categoria.nome
+
+                            mensagemEdicao = ""
+                        },
+
+                        modifier =
+                            Modifier.fillMaxWidth()
+                    ) {
+
+                        Text("Editar")
+                    }
+
+
+                    TextButton(
+                        onClick = {
+
+                            categoriaSelecionadaAcoes =
+                                null
+
+                            categoriaParaExcluir =
+                                categoria
+                        },
+
+                        modifier =
+                            Modifier.fillMaxWidth()
                     ) {
 
                         Text(
-                            text = categoria.nome,
-                            fontWeight = FontWeight.Bold
+                            text = "Excluir",
+                            color =
+                                MaterialTheme.colorScheme.error
                         )
-
-                        Spacer(
-                            modifier = Modifier.height(12.dp)
-                        )
-
-                        Button(
-                            onClick = {
-
-                                categoriaParaEditar =
-                                    categoria
-
-                                novoNomeCategoria =
-                                    categoria.nome
-
-                                mensagemEdicao = ""
-                            },
-
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Text("Editar")
-                        }
-
-                        Spacer(
-                            modifier = Modifier.height(8.dp)
-                        )
-
-                        Button(
-                            onClick = {
-                                categoriaParaExcluir =
-                                    categoria
-                            },
-
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Text("Excluir")
-                        }
                     }
                 }
-            }
+            },
 
-            item {
-                Spacer(
-                    modifier = Modifier.height(24.dp)
-                )
+            confirmButton = {},
 
-                Button(
-                    onClick = onVoltar,
-                    modifier = Modifier.fillMaxWidth()
+            dismissButton = {
+
+                TextButton(
+                    onClick = {
+                        categoriaSelecionadaAcoes =
+                            null
+                    }
                 ) {
-                    Text("Voltar")
+
+                    Text("Cancelar")
                 }
             }
-        }
+        )
     }
 
 
@@ -4642,6 +5657,177 @@ fun TelaCategorias(
         )
     }
 }
+
+@Composable
+fun DropdownBlik(
+    valorSelecionado: String,
+    opcoes: List<String>,
+    onSelecionar: (String) -> Unit,
+    modifier: Modifier = Modifier
+) {
+
+    var aberto by remember {
+        mutableStateOf(false)
+    }
+
+    var larguraPx by remember {
+        mutableStateOf(0)
+    }
+
+    val largura =
+        with(LocalDensity.current) {
+            larguraPx.toDp()
+        }
+
+
+    Box(
+        modifier = modifier
+    ) {
+
+        androidx.compose.material3.OutlinedButton(
+            onClick = {
+                aberto = true
+            },
+
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .onGloballyPositioned { coordenadas ->
+
+                        larguraPx =
+                            coordenadas.size.width
+                    },
+
+            shape =
+                androidx.compose.foundation.shape
+                    .RoundedCornerShape(
+                        14.dp
+                    )
+        ) {
+
+            Text(
+                text = valorSelecionado,
+
+                modifier =
+                    Modifier.fillMaxWidth(),
+
+                textAlign =
+                    TextAlign.Center,
+
+                maxLines = 1
+            )
+        }
+
+
+        DropdownMenu(
+            expanded = aberto,
+
+            onDismissRequest = {
+                aberto = false
+            },
+
+            modifier =
+                if (larguraPx > 0) {
+
+                    Modifier.width(
+                        largura
+                    )
+
+                } else {
+
+                    Modifier
+                }
+        ) {
+
+            opcoes.forEach { opcao ->
+
+                DropdownMenuItem(
+                    text = {
+
+                        Text(
+                            text = opcao,
+
+                            modifier =
+                                Modifier.fillMaxWidth(),
+
+                            textAlign =
+                                TextAlign.Center
+                        )
+                    },
+
+                    onClick = {
+
+                        onSelecionar(
+                            opcao
+                        )
+
+                        aberto = false
+                    }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun DetalheMovimentacao(
+    titulo: String,
+    valor: String
+) {
+
+    Row(
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .padding(
+                    vertical = 5.dp
+                ),
+
+        horizontalArrangement =
+            Arrangement.SpaceBetween,
+
+        verticalAlignment =
+            androidx.compose.ui.Alignment
+                .CenterVertically
+    ) {
+
+        Text(
+            text = titulo,
+
+            fontSize = 13.sp,
+
+            color =
+                MaterialTheme.colorScheme
+                    .onSurfaceVariant
+        )
+
+
+        Spacer(
+            modifier =
+                Modifier.width(16.dp)
+        )
+
+
+        Text(
+            text = valor,
+
+            modifier =
+                Modifier.weight(1f),
+
+            textAlign =
+                TextAlign.End,
+
+            fontSize = 13.sp,
+
+            fontWeight =
+                FontWeight.Medium,
+
+            color =
+                MaterialTheme.colorScheme.onSurface
+        )
+    }
+}
+
 @Composable
 fun TelaHistorico(
     movimentacoes: List<Movimentacao>,
@@ -4687,14 +5873,6 @@ fun TelaHistorico(
     }
 
     var mostrarFiltros by remember {
-        mutableStateOf(false)
-    }
-
-    var menuMesAberto by remember {
-        mutableStateOf(false)
-    }
-
-    var menuAnoAberto by remember {
         mutableStateOf(false)
     }
 
@@ -4807,7 +5985,10 @@ fun TelaHistorico(
         }
 
     Scaffold(
-        modifier = Modifier.fillMaxSize()
+        modifier = Modifier.fillMaxSize(),
+
+        containerColor =
+            MaterialTheme.colorScheme.background
     ) { innerPadding ->
 
         LazyColumn(
@@ -4823,137 +6004,156 @@ fun TelaHistorico(
                     modifier = Modifier.height(20.dp)
                 )
 
+
+                // =============================================
+                // CABEÇALHO
+                // =============================================
+
                 Text(
                     text = "Histórico",
                     fontSize = 28.sp,
-                    fontWeight = FontWeight.Bold
+                    fontWeight = FontWeight.Bold,
+                    color =
+                        MaterialTheme.colorScheme.onBackground
                 )
 
                 Spacer(
-                    modifier = Modifier.height(16.dp)
+                    modifier = Modifier.height(4.dp)
                 )
 
                 Text(
-                    text = "Filtrar movimentações",
-                    fontWeight = FontWeight.Bold
+                    text = "Acompanhe suas movimentações",
+                    fontSize = 14.sp,
+                    color =
+                        MaterialTheme.colorScheme.onSurfaceVariant
                 )
 
+
                 Spacer(
-                    modifier = Modifier.height(8.dp)
+                    modifier = Modifier.height(20.dp)
                 )
+
+
+                // =============================================
+                // MÊS E ANO
+                // =============================================
 
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier =
+                        Modifier.fillMaxWidth(),
+
                     horizontalArrangement =
-                        Arrangement.spacedBy(8.dp)
+                        Arrangement.spacedBy(10.dp)
                 ) {
 
-                    Box(
-                        modifier = Modifier.weight(1f)
-                    ) {
+                    DropdownBlik(
+                        valorSelecionado =
+                            mesSelecionadoNome,
 
-                        Button(
-                            onClick = {
-                                menuMesAberto = true
+                        opcoes =
+                            meses.map { mes ->
+                                mes.first
                             },
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Text("Mês: $mesSelecionadoNome")
+
+                        modifier =
+                            Modifier.weight(1f),
+
+                        onSelecionar = { nomeMes ->
+
+                            val mesSelecionadoNovo =
+                                meses.first { mes ->
+                                    mes.first == nomeMes
+                                }
+
+                            mesSelecionado =
+                                mesSelecionadoNovo.second
+
+                            mesSelecionadoNome =
+                                mesSelecionadoNovo.first
                         }
+                    )
 
-                        DropdownMenu(
-                            expanded = menuMesAberto,
-                            onDismissRequest = {
-                                menuMesAberto = false
-                            }
-                        ) {
 
-                            meses.forEach { mes ->
+                    DropdownBlik(
+                        valorSelecionado =
+                            anoSelecionado,
 
-                                DropdownMenuItem(
-                                    text = {
-                                        Text(mes.first)
-                                    },
+                        opcoes =
+                            anos,
 
-                                    onClick = {
-                                        mesSelecionado = mes.second
-                                        mesSelecionadoNome = mes.first
-                                        menuMesAberto = false
-                                    }
-                                )
-                            }
+                        modifier =
+                            Modifier.weight(1f),
+
+                        onSelecionar = { ano ->
+
+                            anoSelecionado =
+                                ano
                         }
-                    }
-
-                    Box(
-                        modifier = Modifier.weight(1f)
-                    ) {
-
-                        Button(
-                            onClick = {
-                                menuAnoAberto = true
-                            },
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Text("Ano: $anoSelecionado")
-                        }
-
-                        DropdownMenu(
-                            expanded = menuAnoAberto,
-                            onDismissRequest = {
-                                menuAnoAberto = false
-                            }
-                        ) {
-
-                            anos.forEach { ano ->
-
-                                DropdownMenuItem(
-                                    text = {
-                                        Text(ano)
-                                    },
-
-                                    onClick = {
-                                        anoSelecionado = ano
-                                        menuAnoAberto = false
-                                    }
-                                )
-                            }
-                        }
-                    }
+                    )
                 }
 
-                Spacer(
-                    modifier = Modifier.height(8.dp)
-                )
 
-                Button(
+                // =============================================
+                // FILTROS ADICIONAIS
+                // =============================================
+
+                val quantidadeFiltrosAtivos =
+                    listOf(
+                        mesSelecionado != "Todos",
+                        anoSelecionado != "Todos",
+                        contaSelecionada != "Todas",
+                        categoriaSelecionada != "Todas",
+                        tipoSelecionado != "Todos"
+                    ).count { it }
+
+
+                androidx.compose.material3.FilledTonalButton(
                     onClick = {
                         mostrarFiltros = true
                     },
-                    modifier = Modifier.fillMaxWidth()
-                ) {
 
-                    val filtrosAtivos =
-                        listOf(
-                            contaSelecionada != "Todas",
-                            categoriaSelecionada != "Todas",
-                            tipoSelecionado != "Todos"
-                        ).count { it }
+                    modifier =
+                        Modifier.fillMaxWidth(),
+
+                    shape =
+                        androidx.compose.foundation.shape
+                            .RoundedCornerShape(14.dp)
+                ) {
 
                     Text(
                         text =
-                            if (filtrosAtivos == 0) {
+                            if (quantidadeFiltrosAtivos == 0) {
                                 "Filtros"
                             } else {
-                                "Filtros ($filtrosAtivos)"
+                                "Filtros ($quantidadeFiltrosAtivos)"
                             }
                     )
                 }
 
+
                 Spacer(
-                    modifier = Modifier.height(16.dp)
+                    modifier = Modifier.height(12.dp)
                 )
 
+
+                Text(
+                    text =
+                        if (movimentacoesFiltradas.size == 1) {
+                            "1 movimentação encontrada"
+                        } else {
+                            "${movimentacoesFiltradas.size} movimentações encontradas"
+                        },
+
+                    fontSize = 13.sp,
+
+                    color =
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+
+                Spacer(
+                    modifier = Modifier.height(10.dp)
+                )
             }
 
             if (movimentacoesFiltradas.isEmpty()) {
@@ -4975,135 +6175,216 @@ fun TelaHistorico(
                     items = movimentacoesFiltradas
                 ) { movimentacao ->
 
-                    Card(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 6.dp)
-                            .clickable {
-                                movimentacaoSelecionada = movimentacao
+                    val corValor =
+                        when (movimentacao.tipo) {
+
+                            "Entrada" ->
+                                BlikPrimary
+
+                            "Saída" ->
+                                BlikSaida
+
+                            else ->
+                                MaterialTheme.colorScheme.onSurface
+                        }
+
+
+                    val textoValor =
+                        when (movimentacao.tipo) {
+
+                            "Entrada" ->
+                                "+ ${formatarDinheiro(movimentacao.valor)}"
+
+                            "Saída" ->
+                                "- ${formatarDinheiro(movimentacao.valor)}"
+
+                            else ->
+                                formatarDinheiro(movimentacao.valor)
+                        }
+
+
+                    val detalheMovimentacao =
+                        when {
+
+                            movimentacao.tipo == "Transferência" -> {
+
+                                "${movimentacao.contaNome ?: "Conta"} → " +
+                                        (movimentacao.contaDestinoNome ?: "Conta")
                             }
+
+
+                            movimentacao.tipo == "Saída" &&
+                                    movimentacao.formaPagamento == "Crédito" -> {
+
+                                val parcelas =
+                                    if (
+                                        movimentacao.quantidadeParcelas > 1
+                                    ) {
+
+                                        " • ${movimentacao.quantidadeParcelas}x"
+
+                                    } else {
+                                        ""
+                                    }
+
+                                "${movimentacao.cartaoNome ?: "Cartão"} • Crédito$parcelas"
+                            }
+
+
+                            movimentacao.tipo == "Saída" -> {
+
+                                "${movimentacao.contaNome ?: "Conta"} • " +
+                                        (movimentacao.categoriaNome
+                                            ?: "Sem categoria")
+                            }
+
+
+                            movimentacao.tipo == "Entrada" -> {
+
+                                "${movimentacao.contaNome ?: "Conta"} • " +
+                                        (movimentacao.categoriaNome
+                                            ?: "Sem categoria")
+                            }
+
+
+                            else -> ""
+                        }
+
+
+                    Card(
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 5.dp)
+                                .clickable {
+                                    movimentacaoSelecionada =
+                                        movimentacao
+                                },
+
+                        shape =
+                            androidx.compose.foundation.shape
+                                .RoundedCornerShape(
+                                    18.dp
+                                ),
+
+                        colors =
+                            androidx.compose.material3.CardDefaults
+                                .cardColors(
+                                    containerColor =
+                                        MaterialTheme.colorScheme.surface
+                                ),
+
+                        elevation =
+                            androidx.compose.material3.CardDefaults
+                                .cardElevation(
+                                    defaultElevation = 2.dp
+                                )
                     ) {
 
                         Column(
-                            modifier = Modifier.padding(16.dp)
+                            modifier =
+                                Modifier.padding(
+                                    horizontal = 16.dp,
+                                    vertical = 14.dp
+                                )
                         ) {
 
+
+                            // DESCRIÇÃO + VALOR
                             Row(
-                                modifier = Modifier.fillMaxWidth(),
+                                modifier =
+                                    Modifier.fillMaxWidth(),
+
                                 horizontalArrangement =
-                                    Arrangement.SpaceBetween
+                                    Arrangement.SpaceBetween,
+
+                                verticalAlignment =
+                                    androidx.compose.ui.Alignment
+                                        .CenterVertically
                             ) {
 
                                 Text(
-                                    text = movimentacao.descricao,
-                                    fontWeight = FontWeight.Bold
+                                    text =
+                                        movimentacao.descricao,
+
+                                    modifier =
+                                        Modifier.weight(1f),
+
+                                    fontSize = 16.sp,
+
+                                    fontWeight =
+                                        FontWeight.SemiBold,
+
+                                    color =
+                                        MaterialTheme.colorScheme
+                                            .onSurface
                                 )
 
-                                Text(
-                                    text =
-                                       when (movimentacao.tipo){
-                                           "Entrada" ->
-                                               "+ ${formatarDinheiro(movimentacao.valor)}"
-                                           "Saída" ->
-                                               "- ${formatarDinheiro(movimentacao.valor)}"
-                                           "Transferência" ->
-                                               formatarDinheiro(movimentacao.valor)
 
-                                           else ->
-                                               formatarDinheiro(movimentacao.valor)
-                                       },
-                                    fontWeight = FontWeight.Bold
+                                Spacer(
+                                    modifier =
+                                        Modifier.width(12.dp)
+                                )
+
+
+                                Text(
+                                    text = textoValor,
+
+                                    fontSize = 16.sp,
+
+                                    fontWeight =
+                                        FontWeight.Bold,
+
+                                    color = corValor
                                 )
                             }
 
-                            Spacer(
-                                modifier = Modifier.height(4.dp)
-                            )
 
-                            val detalheMovimentacao =
-                                when {
+                            if (
+                                detalheMovimentacao.isNotBlank()
+                            ) {
 
-                                    movimentacao.tipo == "Transferência" -> {
+                                Spacer(
+                                    modifier =
+                                        Modifier.height(5.dp)
+                                )
 
-                                        "${movimentacao.contaNome ?: "Conta"} → " +
-                                                (movimentacao.contaDestinoNome ?: "Conta")
-                                    }
 
-                                    movimentacao.tipo == "Saída" &&
-                                            movimentacao.formaPagamento == "Crédito" -> {
+                                Text(
+                                    text =
+                                        detalheMovimentacao,
 
-                                        val parcelas =
-                                            if (movimentacao.quantidadeParcelas > 1) {
-                                                " • ${movimentacao.quantidadeParcelas}x"
-                                            } else {
-                                                ""
-                                            }
+                                    fontSize = 13.sp,
 
-                                        "${movimentacao.cartaoNome ?: "Cartão"} • Crédito$parcelas"
-                                    }
+                                    color =
+                                        MaterialTheme.colorScheme
+                                            .onSurfaceVariant
+                                )
+                            }
 
-                                    movimentacao.tipo == "Saída" -> {
-
-                                        "${movimentacao.contaNome ?: "Conta"} • " +
-                                                (movimentacao.categoriaNome ?: "Sem categoria")
-                                    }
-
-                                    movimentacao.tipo == "Entrada" -> {
-
-                                        "${movimentacao.contaNome ?: "Conta"} • " +
-                                                (movimentacao.categoriaNome ?: "Sem categoria")
-                                    }
-
-                                    else -> ""
-                                }
-                            Text(
-                                text = detalheMovimentacao
-                            )
 
                             Spacer(
-                                modifier = Modifier.height(4.dp)
+                                modifier =
+                                    Modifier.height(6.dp)
                             )
 
+
                             Text(
-                                text = movimentacao.data,
-                                fontSize = 12.sp
+                                text =
+                                    movimentacao.data,
+
+                                fontSize = 12.sp,
+
+                                color =
+                                    MaterialTheme.colorScheme
+                                        .onSurfaceVariant
                             )
                         }
                     }
                 }
             }
-
-            item {
-
-                Spacer(
-                    modifier = Modifier.height(16.dp)
-                )
-
-                Button(
-                    onClick = onVoltar,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text("Voltar")
-                }
-
-                Spacer(
-                    modifier = Modifier.height(24.dp)
-                )
-            }
         }
         if (mostrarFiltros) {
-
-            var menuContaDialogAberto by remember {
-                mutableStateOf(false)
-            }
-
-            var menuCategoriaDialogAberto by remember {
-                mutableStateOf(false)
-            }
-
-            var menuTipoDialogAberto by remember {
-                mutableStateOf(false)
-            }
 
             AlertDialog(
                 onDismissRequest = {
@@ -5111,7 +6392,26 @@ fun TelaHistorico(
                 },
 
                 title = {
-                    Text("Filtros")
+
+                    Column {
+
+                        Text(
+                            text = "Filtros",
+                            fontWeight = FontWeight.Bold
+                        )
+
+                        Spacer(
+                            modifier = Modifier.height(2.dp)
+                        )
+
+                        Text(
+                            text = "Refine as movimentações exibidas",
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Normal,
+                            color =
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 },
 
                 text = {
@@ -5127,41 +6427,22 @@ fun TelaHistorico(
                             modifier = Modifier.height(6.dp)
                         )
 
-                        Box(
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
+                        DropdownBlik(
+                            valorSelecionado =
+                                contaSelecionada,
 
-                            Button(
-                                onClick = {
-                                    menuContaDialogAberto = true
-                                },
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Text(contaSelecionada)
+                            opcoes =
+                                contasDisponiveis,
+
+                            modifier =
+                                Modifier.fillMaxWidth(),
+
+                            onSelecionar = { conta ->
+
+                                contaSelecionada =
+                                    conta
                             }
-
-                            DropdownMenu(
-                                expanded = menuContaDialogAberto,
-                                onDismissRequest = {
-                                    menuContaDialogAberto = false
-                                }
-                            ) {
-
-                                contasDisponiveis.forEach { conta ->
-
-                                    DropdownMenuItem(
-                                        text = {
-                                            Text(conta)
-                                        },
-
-                                        onClick = {
-                                            contaSelecionada = conta
-                                            menuContaDialogAberto = false
-                                        }
-                                    )
-                                }
-                            }
-                        }
+                        )
 
                         Spacer(
                             modifier = Modifier.height(16.dp)
@@ -5176,41 +6457,22 @@ fun TelaHistorico(
                             modifier = Modifier.height(6.dp)
                         )
 
-                        Box(
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
+                        DropdownBlik(
+                            valorSelecionado =
+                                categoriaSelecionada,
 
-                            Button(
-                                onClick = {
-                                    menuCategoriaDialogAberto = true
-                                },
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Text(categoriaSelecionada)
+                            opcoes =
+                                categoriasDisponiveis,
+
+                            modifier =
+                                Modifier.fillMaxWidth(),
+
+                            onSelecionar = { categoria ->
+
+                                categoriaSelecionada =
+                                    categoria
                             }
-
-                            DropdownMenu(
-                                expanded = menuCategoriaDialogAberto,
-                                onDismissRequest = {
-                                    menuCategoriaDialogAberto = false
-                                }
-                            ) {
-
-                                categoriasDisponiveis.forEach { categoria ->
-
-                                    DropdownMenuItem(
-                                        text = {
-                                            Text(categoria)
-                                        },
-
-                                        onClick = {
-                                            categoriaSelecionada = categoria
-                                            menuCategoriaDialogAberto = false
-                                        }
-                                    )
-                                }
-                            }
-                        }
+                        )
 
                         Spacer(
                             modifier = Modifier.height(16.dp)
@@ -5225,54 +6487,44 @@ fun TelaHistorico(
                             modifier = Modifier.height(6.dp)
                         )
 
-                        Box(
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
+                        DropdownBlik(
+                            valorSelecionado =
+                                tipoSelecionado,
 
-                            Button(
-                                onClick = {
-                                    menuTipoDialogAberto = true
-                                },
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Text(tipoSelecionado)
+                            opcoes =
+                                tipos,
+
+                            modifier =
+                                Modifier.fillMaxWidth(),
+
+                            onSelecionar = { tipo ->
+
+                                tipoSelecionado =
+                                    tipo
                             }
-
-                            DropdownMenu(
-                                expanded = menuTipoDialogAberto,
-                                onDismissRequest = {
-                                    menuTipoDialogAberto = false
-                                }
-                            ) {
-
-                                tipos.forEach { tipo ->
-
-                                    DropdownMenuItem(
-                                        text = {
-                                            Text(tipo)
-                                        },
-
-                                        onClick = {
-                                            tipoSelecionado = tipo
-                                            menuTipoDialogAberto = false
-                                        }
-                                    )
-                                }
-                            }
-                        }
+                        )
 
                         Spacer(
                             modifier = Modifier.height(16.dp)
                         )
 
-                        TextButton(
+                        androidx.compose.material3.FilledTonalButton(
                             onClick = {
 
                                 contaSelecionada = "Todas"
                                 categoriaSelecionada = "Todas"
                                 tipoSelecionado = "Todos"
-                            }
+                            },
+
+                            modifier =
+                                Modifier.fillMaxWidth(),
+
+                            shape =
+                                androidx.compose.foundation.shape.RoundedCornerShape(
+                                    14.dp
+                                )
                         ) {
+
                             Text("Limpar filtros")
                         }
                     }
@@ -5303,155 +6555,286 @@ fun TelaHistorico(
         }
         movimentacaoSelecionada?.let { movimentacao ->
 
+            val corMovimentacao =
+                when (movimentacao.tipo) {
+
+                    "Entrada" ->
+                        BlikPrimary
+
+                    "Saída" ->
+                        BlikSaida
+
+                    else ->
+                        MaterialTheme.colorScheme.onSurface
+                }
+
+
+            val corFundoMovimentacao =
+                when (movimentacao.tipo) {
+
+                    "Entrada" ->
+                        BlikEntradaContainer
+
+                    "Saída" ->
+                        BlikSaidaContainer
+
+                    else ->
+                        MaterialTheme.colorScheme.surfaceVariant
+                }
+
+
+            val textoValor =
+                when (movimentacao.tipo) {
+
+                    "Entrada" ->
+                        "+ ${formatarDinheiro(movimentacao.valor)}"
+
+                    "Saída" ->
+                        "- ${formatarDinheiro(movimentacao.valor)}"
+
+                    else ->
+                        formatarDinheiro(movimentacao.valor)
+                }
+
+
             AlertDialog(
                 onDismissRequest = {
                     movimentacaoSelecionada = null
                 },
 
                 title = {
-                    Text(movimentacao.descricao)
-                },
-
-                text = {
 
                     Column {
 
                         Text(
                             text =
-                                when (movimentacao.tipo) {
+                                movimentacao.descricao,
 
-                                    "Entrada" ->
-                                        "Entrada: ${formatarDinheiro(movimentacao.valor)}"
+                            fontSize = 20.sp,
 
-                                    "Saída" ->
-                                        "Saída: ${formatarDinheiro(movimentacao.valor)}"
-
-                                    "Transferência" ->
-                                        "Transferência: ${formatarDinheiro(movimentacao.valor)}"
-
-                                    else ->
-                                        formatarDinheiro(movimentacao.valor)
-                                }
+                            fontWeight =
+                                FontWeight.Bold
                         )
 
                         Spacer(
-                            modifier = Modifier.height(8.dp)
+                            modifier =
+                                Modifier.height(4.dp)
                         )
 
+                        Text(
+                            text =
+                                movimentacao.tipo,
 
-                        when {
+                            fontSize = 13.sp,
 
-                            movimentacao.tipo == "Transferência" -> {
+                            color =
+                                MaterialTheme.colorScheme
+                                    .onSurfaceVariant
+                        )
+                    }
+                },
+
+                text = {
+
+                    Column(
+                        modifier =
+                            Modifier.fillMaxWidth()
+                    ) {
+
+
+                        // =====================================
+                        // VALOR
+                        // =====================================
+
+                        Box(
+                            modifier =
+                                Modifier
+                                    .fillMaxWidth()
+                                    .background(
+                                        color =
+                                            corFundoMovimentacao,
+
+                                        shape =
+                                            androidx.compose.foundation.shape
+                                                .RoundedCornerShape(
+                                                    16.dp
+                                                )
+                                    )
+                                    .padding(
+                                        horizontal = 16.dp,
+                                        vertical = 14.dp
+                                    )
+                        ) {
+
+                            Column {
 
                                 Text(
-                                    text =
-                                        "Origem: ${
-                                            movimentacao.contaNome
-                                                ?: "Não informada"
-                                        }"
+                                    text = "Valor",
+
+                                    fontSize = 12.sp,
+
+                                    color =
+                                        MaterialTheme.colorScheme
+                                            .onSurfaceVariant
+                                )
+
+                                Spacer(
+                                    modifier =
+                                        Modifier.height(2.dp)
                                 )
 
                                 Text(
                                     text =
-                                        "Destino: ${
-                                            movimentacao.contaDestinoNome
-                                                ?: "Não informado"
-                                        }"
+                                        textoValor,
+
+                                    fontSize = 22.sp,
+
+                                    fontWeight =
+                                        FontWeight.Bold,
+
+                                    color =
+                                        corMovimentacao
+                                )
+                            }
+                        }
+
+
+                        Spacer(
+                            modifier =
+                                Modifier.height(18.dp)
+                        )
+
+
+                        // =====================================
+                        // DETALHES
+                        // =====================================
+
+                        when {
+
+                            movimentacao.tipo ==
+                                    "Transferência" -> {
+
+                                DetalheMovimentacao(
+                                    titulo = "Conta de origem",
+                                    valor =
+                                        movimentacao.contaNome
+                                            ?: "Não informada"
+                                )
+
+                                DetalheMovimentacao(
+                                    titulo = "Conta de destino",
+                                    valor =
+                                        movimentacao
+                                            .contaDestinoNome
+                                            ?: "Não informada"
                                 )
                             }
 
 
                             movimentacao.tipo == "Saída" &&
-                                    movimentacao.formaPagamento == "Crédito" -> {
+                                    movimentacao.formaPagamento ==
+                                    "Crédito" -> {
 
-                                Text(
-                                    text =
-                                        "Forma de pagamento: Crédito"
+                                DetalheMovimentacao(
+                                    titulo = "Cartão",
+                                    valor =
+                                        movimentacao.cartaoNome
+                                            ?: "Não informado"
                                 )
 
-                                Text(
-                                    text =
-                                        "Cartão: ${
-                                            movimentacao.cartaoNome
-                                                ?: "Não informado"
-                                        }"
+                                DetalheMovimentacao(
+                                    titulo = "Forma de pagamento",
+                                    valor = "Crédito"
                                 )
 
-                                Text(
-                                    text =
-                                        "Parcelas: ${
-                                            movimentacao.quantidadeParcelas
-                                        }x"
+                                DetalheMovimentacao(
+                                    titulo = "Parcelamento",
+                                    valor =
+                                        if (
+                                            movimentacao
+                                                .quantidadeParcelas > 1
+                                        ) {
+                                            "${movimentacao.quantidadeParcelas}x"
+                                        } else {
+                                            "À vista"
+                                        }
                                 )
 
-                                Text(
-                                    text =
-                                        "Categoria: ${
-                                            movimentacao.categoriaNome
-                                                ?: "Não informada"
-                                        }"
+                                DetalheMovimentacao(
+                                    titulo = "Categoria",
+                                    valor =
+                                        movimentacao
+                                            .categoriaNome
+                                            ?: "Não informada"
                                 )
                             }
 
 
                             else -> {
 
-                                Text(
-                                    text =
-                                        "Conta: ${
-                                            movimentacao.contaNome
-                                                ?: "Não informada"
-                                        }"
+                                DetalheMovimentacao(
+                                    titulo = "Conta",
+                                    valor =
+                                        movimentacao.contaNome
+                                            ?: "Não informada"
                                 )
 
-                                Text(
-                                    text =
-                                        "Categoria: ${
-                                            movimentacao.categoriaNome
-                                                ?: "Não informada"
-                                        }"
+                                DetalheMovimentacao(
+                                    titulo = "Categoria",
+                                    valor =
+                                        movimentacao
+                                            .categoriaNome
+                                            ?: "Não informada"
                                 )
+
 
                                 if (
-                                    movimentacao.tipo == "Saída"
+                                    movimentacao.tipo ==
+                                    "Saída"
                                 ) {
 
-                                    Text(
-                                        text =
-                                            "Forma de pagamento: ${
-                                                movimentacao.formaPagamento
-                                                    ?: "Não informada"
-                                            }"
+                                    DetalheMovimentacao(
+                                        titulo =
+                                            "Forma de pagamento",
+
+                                        valor =
+                                            movimentacao
+                                                .formaPagamento
+                                                ?: "Não informada"
                                     )
                                 }
                             }
                         }
 
 
-                        Spacer(
-                            modifier = Modifier.height(8.dp)
-                        )
-
-                        Text(
-                            text = "Data: ${movimentacao.data}"
+                        DetalheMovimentacao(
+                            titulo = "Data",
+                            valor = movimentacao.data
                         )
                     }
                 },
 
                 confirmButton = {
 
-                    Row {
+                    TextButton(
+                        onClick = {
 
-                        TextButton(
-                            onClick = {
+                            movimentacaoSelecionada =
+                                null
 
-                                movimentacaoSelecionada = null
-
-                                onEditar(movimentacao)
-                            }
-                        ) {
-                            Text("Editar")
+                            onEditar(
+                                movimentacao
+                            )
                         }
+                    ) {
+
+                        Text("Editar")
+                    }
+                },
+
+                dismissButton = {
+
+                    Row {
 
                         TextButton(
                             onClick = {
@@ -5463,19 +6846,24 @@ fun TelaHistorico(
                                     null
                             }
                         ) {
-                            Text("Excluir")
-                        }
-                    }
-                },
 
-                dismissButton = {
-
-                    TextButton(
-                        onClick = {
-                            movimentacaoSelecionada = null
+                            Text(
+                                text = "Excluir",
+                                color =
+                                    MaterialTheme.colorScheme.error
+                            )
                         }
-                    ) {
-                        Text("Fechar")
+
+
+                        TextButton(
+                            onClick = {
+                                movimentacaoSelecionada =
+                                    null
+                            }
+                        ) {
+
+                            Text("Fechar")
+                        }
                     }
                 }
             )
@@ -5526,6 +6914,7 @@ fun TelaHistorico(
         }
     }
 }
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TelaFaturas(
@@ -5573,14 +6962,6 @@ fun TelaFaturas(
         )
     }
 
-    var mostrarSelecaoMes by remember {
-        mutableStateOf(false)
-    }
-
-    var mostrarSelecaoAno by remember {
-        mutableStateOf(false)
-    }
-
 
     // PAGAMENTO
 
@@ -5604,10 +6985,6 @@ fun TelaFaturas(
         mutableStateOf<ContaEntity?>(null)
     }
 
-    var mostrarSelecaoContaPagamento by remember {
-        mutableStateOf(false)
-    }
-
     var dataPagamento by remember {
         mutableStateOf(
             SimpleDateFormat(
@@ -5629,6 +7006,10 @@ fun TelaFaturas(
         mutableStateOf<PagamentoFaturaComConta?>(
             null
         )
+    }
+
+    var cartaoExpandidoId by remember {
+        mutableStateOf<Int?>(null)
     }
 
     val nomesMeses =
@@ -5704,7 +7085,20 @@ fun TelaFaturas(
                 Text(
                     text = "Faturas",
                     fontSize = 28.sp,
-                    fontWeight = FontWeight.Bold
+                    fontWeight = FontWeight.Bold,
+                    color =
+                        MaterialTheme.colorScheme.onBackground
+                )
+
+                Spacer(
+                    modifier = Modifier.height(4.dp)
+                )
+
+                Text(
+                    text = "Acompanhe seus cartões e pagamentos",
+                    fontSize = 14.sp,
+                    color =
+                        MaterialTheme.colorScheme.onSurfaceVariant
                 )
 
                 Spacer(
@@ -5717,43 +7111,65 @@ fun TelaFaturas(
                         Modifier.fillMaxWidth(),
 
                     horizontalArrangement =
-                        Arrangement.spacedBy(8.dp)
+                        Arrangement.spacedBy(10.dp)
                 ) {
 
-                    Button(
-                        onClick = {
-                            mostrarSelecaoMes = true
-                        },
+                    // MÊS
+                    DropdownBlik(
+                        valorSelecionado =
+                            nomesMeses[
+                                mesSelecionado - 1
+                            ],
+
+                        opcoes =
+                            nomesMeses,
+
                         modifier =
-                            Modifier.weight(1f)
-                    ) {
+                            Modifier.weight(1f),
 
-                        Text(
-                            text =
-                                nomesMeses[
-                                    mesSelecionado - 1
-                                ]
-                        )
-                    }
+                        onSelecionar = { nomeMes ->
+
+                            val indice =
+                                nomesMeses.indexOf(
+                                    nomeMes
+                                )
+
+                            if (indice >= 0) {
+                                mesSelecionado =
+                                    indice + 1
+                            }
+                        }
+                    )
 
 
-                    Button(
-                        onClick = {
-                            mostrarSelecaoAno = true
-                        },
+                    // ANO
+                    DropdownBlik(
+                        valorSelecionado =
+                            anoSelecionado.toString(),
+
+                        opcoes =
+                            anosDisponiveis.map { ano ->
+                                ano.toString()
+                            },
+
                         modifier =
-                            Modifier.weight(1f)
-                    ) {
+                            Modifier.weight(1f),
 
-                        Text(
-                            text =
-                                anoSelecionado.toString()
-                        )
-                    }
+                        onSelecionar = { ano ->
+
+                            ano.toIntOrNull()
+                                ?.let { anoConvertido ->
+
+                                    anoSelecionado =
+                                        anoConvertido
+                                }
+                        }
+                    )
                 }
 
+
                 Spacer(
-                    modifier = Modifier.height(24.dp)
+                    modifier = Modifier.height(20.dp)
                 )
             }
 
@@ -5766,18 +7182,138 @@ fun TelaFaturas(
 
                 item {
 
-                    Text(
-                        text =
-                            "Nenhuma fatura encontrada para " +
-                                    "${nomesMeses[mesSelecionado - 1]} " +
-                                    "de $anoSelecionado."
-                    )
+                    Card(
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .padding(
+                                    vertical = 6.dp
+                                ),
+
+                        shape =
+                            androidx.compose.foundation.shape
+                                .RoundedCornerShape(
+                                    18.dp
+                                ),
+
+                        colors =
+                            androidx.compose.material3.CardDefaults
+                                .cardColors(
+                                    containerColor =
+                                        MaterialTheme.colorScheme.surface
+                                ),
+
+                        elevation =
+                            androidx.compose.material3.CardDefaults
+                                .cardElevation(
+                                    defaultElevation = 1.dp
+                                )
+                    ) {
+
+                        Column(
+                            modifier =
+                                Modifier
+                                    .fillMaxWidth()
+                                    .padding(
+                                        horizontal = 22.dp,
+                                        vertical = 26.dp
+                                    ),
+
+                            horizontalAlignment =
+                                androidx.compose.ui.Alignment.CenterHorizontally
+                        ) {
+
+                            Text(
+                                text =
+                                    "Nenhuma fatura neste período",
+
+                                fontSize = 17.sp,
+
+                                fontWeight =
+                                    FontWeight.SemiBold,
+
+                                textAlign =
+                                    TextAlign.Center,
+
+                                color =
+                                    MaterialTheme.colorScheme
+                                        .onSurface
+                            )
+
+
+                            Spacer(
+                                modifier =
+                                    Modifier.height(6.dp)
+                            )
+
+
+                            Text(
+                                text =
+                                    "Não existem compras no crédito " +
+                                            "para o período selecionado.",
+
+                                fontSize = 13.sp,
+
+                                textAlign =
+                                    TextAlign.Center,
+
+                                color =
+                                    MaterialTheme.colorScheme
+                                        .onSurfaceVariant
+                            )
+
+
+                            Spacer(
+                                modifier =
+                                    Modifier.height(16.dp)
+                            )
+
+
+                            Box(
+                                modifier =
+                                    Modifier.background(
+                                        color =
+                                            MaterialTheme.colorScheme
+                                                .primaryContainer,
+
+                                        shape =
+                                            androidx.compose.foundation.shape
+                                                .RoundedCornerShape(
+                                                    50.dp
+                                                )
+                                    )
+                            ) {
+
+                                Text(
+                                    text =
+                                        "${nomesMeses[mesSelecionado - 1]} " +
+                                                "de $anoSelecionado",
+
+                                    modifier =
+                                        Modifier.padding(
+                                            horizontal = 14.dp,
+                                            vertical = 6.dp
+                                        ),
+
+                                    fontSize = 12.sp,
+
+                                    fontWeight =
+                                        FontWeight.Medium,
+
+                                    color =
+                                        MaterialTheme.colorScheme
+                                            .primary
+                                )
+                            }
+                        }
+                    }
+
 
                     Spacer(
-                        modifier = Modifier.height(24.dp)
+                        modifier =
+                            Modifier.height(24.dp)
                     )
                 }
-
             } else {
 
                 // =================================================
@@ -5854,6 +7390,42 @@ fun TelaFaturas(
                             )
                         } else { "Indisponível"}
 
+                    val corStatusFatura =
+                        when (statusFatura) {
+
+                            "Vencida" ->
+                                BlikSaida
+
+                            "Fechada" ->
+                                BlikFatura
+
+                            "Paga" ->
+                                BlikPrimary
+
+                            else ->
+                                BlikPrimary
+                        }
+
+
+                    val fundoStatusFatura =
+                        when (statusFatura) {
+
+                            "Vencida" ->
+                                BlikSaidaContainer
+
+                            "Fechada" ->
+                                BlikFaturaContainer
+
+                            "Paga" ->
+                                BlikEntradaContainer
+
+                            else ->
+                                BlikEntradaContainer
+                        }
+
+                    val estaExpandido =
+                        cartaoExpandidoId == cartaoId
+
 
                     // =============================================
                     // CABEÇALHO DA FATURA
@@ -5865,299 +7437,651 @@ fun TelaFaturas(
                             modifier =
                                 Modifier
                                     .fillMaxWidth()
-                                    .padding(
-                                        vertical = 8.dp
+                                    .padding(vertical = 6.dp)
+                                    .clickable {
+
+                                        cartaoExpandidoId =
+                                            if (estaExpandido) {
+                                                null
+                                            } else {
+                                                cartaoId
+                                            }
+                                    },
+
+                            shape =
+                                androidx.compose.foundation.shape
+                                    .RoundedCornerShape(20.dp),
+
+                            colors =
+                                androidx.compose.material3.CardDefaults
+                                    .cardColors(
+                                        containerColor =
+                                            MaterialTheme.colorScheme.surface
+                                    ),
+
+                            elevation =
+                                androidx.compose.material3.CardDefaults
+                                    .cardElevation(
+                                        defaultElevation = 2.dp
                                     )
                         ) {
 
                             Column(
                                 modifier =
-                                    Modifier.padding(16.dp)
+                                    Modifier.padding(18.dp)
                             ) {
 
-                                Text(
-                                    text = primeiraParcela.cartaoNome,
-                                    fontSize = 20.sp,
-                                    fontWeight = FontWeight.Bold
-                                )
 
-                                Spacer(
-                                    modifier = Modifier.height(4.dp)
-                                )
+                                // =========================================
+                                // CARTÃO + STATUS
+                                // =========================================
 
-                                Text(
-                                    text = statusFatura,
-                                    fontWeight = FontWeight.Bold
-                                )
+                                Row(
+                                    modifier =
+                                        Modifier.fillMaxWidth(),
 
-                                Spacer(
-                                    modifier = Modifier.height(8.dp)
-                                )
+                                    horizontalArrangement =
+                                        Arrangement.SpaceBetween,
 
-                                if( fechamento != null &&
-                                    vencimento != null
+                                    verticalAlignment =
+                                        androidx.compose.ui.Alignment.CenterVertically
                                 ) {
-                                    Text(
-                                        text = "Fechamento: ${formatarDataCalendario(fechamento)}",
-                                        fontSize = 13.sp
-                                    )
 
                                     Text(
-                                        text = "Vencimento: ${formatarDataCalendario(vencimento)}",
-                                        fontSize = 13.sp
-                                    )
-                                }
+                                        text =
+                                            primeiraParcela.cartaoNome,
 
-                                Text(
-                                    text = "Total da fatura: " + formatarDinheiro(totalFatura)
-                                )
+                                        fontSize = 18.sp,
 
-                                Spacer(
-                                    modifier =
-                                        Modifier.height(6.dp)
-                                )
-
-                                Text(
-                                    text =
-                                        "Total da fatura: " +
-                                                formatarDinheiro(
-                                                    totalFatura
-                                                ),
-
-                                    fontWeight =
-                                        FontWeight.Bold
-                                )
-
-                                Spacer(
-                                    modifier =
-                                        Modifier.height(4.dp)
-                                )
-
-                                Text(
-                                    text =
-                                        "Pago: ${
-                                            formatarDinheiro(
-                                                totalPago
-                                            )
-                                        }"
-                                )
-
-                                Text(
-                                    text =
-                                        "Em aberto: ${
-                                            formatarDinheiro(
-                                                restante
-                                            )
-                                        }",
-
-                                    fontWeight =
-                                        FontWeight.Bold
-                                )
-
-
-                                if (restante > 0.0) {
-
-                                    Spacer(
-                                        modifier =
-                                            Modifier.height(
-                                                12.dp
-                                            )
+                                        fontWeight =
+                                            FontWeight.Bold
                                     )
 
-                                    Button(
-                                        onClick = {
 
-                                            cartaoParaPagamento =
-                                                cartaoId
-
-                                            nomeCartaoParaPagamento =
-                                                primeiraParcela
-                                                    .cartaoNome
-
-                                            valorRestantePagamento =
-                                                restante
-
-                                            valorPagamento =
-                                                String.format(
-                                                    Locale.getDefault(),
-                                                    "%.2f",
-                                                    restante
-                                                )
-                                                    .replace(
-                                                        ".",
-                                                        ","
-                                                    )
-
-                                            contaPagamento =
-                                                contas.firstOrNull()
-
-                                            mensagemPagamento =
-                                                ""
-                                        },
-
+                                    Box(
                                         modifier =
-                                            Modifier
-                                                .fillMaxWidth()
+                                            Modifier.background(
+                                                color =
+                                                    fundoStatusFatura,
+
+                                                shape =
+                                                    androidx.compose.foundation.shape
+                                                        .RoundedCornerShape(50.dp)
+                                            )
                                     ) {
 
                                         Text(
-                                            "Pagar fatura"
+                                            text =
+                                                statusFatura.uppercase(),
+
+                                            modifier =
+                                                Modifier.padding(
+                                                    horizontal = 10.dp,
+                                                    vertical = 4.dp
+                                                ),
+
+                                            fontSize = 11.sp,
+
+                                            fontWeight =
+                                                FontWeight.Bold,
+
+                                            color =
+                                                corStatusFatura
                                         )
                                     }
+                                }
+
+
+                                Spacer(
+                                    modifier =
+                                        Modifier.height(14.dp)
+                                )
+
+
+                                // =========================================
+                                // EM ABERTO / PAGA
+                                // =========================================
+
+                                if (restante > 0.01) {
+
+                                    Text(
+                                        text = "Em aberto",
+
+                                        fontSize = 12.sp,
+
+                                        color =
+                                            MaterialTheme.colorScheme
+                                                .onSurfaceVariant
+                                    )
+
+                                    Spacer(
+                                        modifier =
+                                            Modifier.height(2.dp)
+                                    )
+
+                                    Text(
+                                        text =
+                                            formatarDinheiro(
+                                                restante
+                                            ),
+
+                                        fontSize = 21.sp,
+
+                                        fontWeight =
+                                            FontWeight.Bold,
+
+                                        color =
+                                            corStatusFatura
+                                    )
+
                                 } else {
 
-                                    Spacer(
-                                        modifier =
-                                            Modifier.height(
-                                                8.dp
-                                            )
-                                    )
-
                                     Text(
-                                        text = "Fatura paga",
+                                        text = "Paga",
+
+                                        fontSize = 18.sp,
+
                                         fontWeight =
-                                            FontWeight.Bold
+                                            FontWeight.Bold,
+
+                                        color =
+                                            BlikPrimary
                                     )
                                 }
-                                if (pagamentosDoCartao.isNotEmpty()) {
+
+
+                                // =========================================
+                                // DATAS
+                                // =========================================
+
+                                if (
+                                    fechamento != null &&
+                                    vencimento != null
+                                ) {
+
                                     Spacer(
-                                        modifier = Modifier.height(16.dp)
+                                        modifier =
+                                            Modifier.height(14.dp)
                                     )
-                                    Text(
-                                        text = "Pagamentos",
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                    Spacer(
-                                        modifier = Modifier.height(8.dp)
-                                    )
-                                    pagamentosDoCartao
-                                        .forEach { pagamento ->
-                                            Card(modifier = Modifier
-                                                                .fillMaxWidth()
-                                                                .padding(vertical = 4.dp)
-                                                                .clickable {
-                                                                    pagamentoParaExcluir = pagamento}
-                                                ) { Column (
-                                                    modifier = Modifier.padding(12.dp)
-                                                ) { Row(
-                                                    modifier = Modifier.fillMaxWidth(),
-                                                    horizontalArrangement = Arrangement.SpaceBetween
-                                                ) { Text(
-                                                    text = pagamento.dataPagamento
-                                                )
-                                                Text(
-                                                    text = formatarDinheiro(
-                                                        pagamento.valorPago
+
+
+                                    Row(
+                                        modifier =
+                                            Modifier.fillMaxWidth(),
+
+                                        horizontalArrangement =
+                                            Arrangement.SpaceBetween
+                                    ) {
+
+                                        Column {
+
+                                            Text(
+                                                text = "Fechamento",
+
+                                                fontSize = 11.sp,
+
+                                                color =
+                                                    MaterialTheme.colorScheme
+                                                        .onSurfaceVariant
+                                            )
+
+                                            Text(
+                                                text =
+                                                    formatarDataCalendario(
+                                                        fechamento
                                                     ),
-                                                    fontWeight = FontWeight.Bold
-                                                    )
-                                                }
-                                                Spacer(
-                                                    modifier = Modifier.height(4.dp)
-                                                )
-                                                Text(
-                                                    text = pagamento.contaNome,
-                                                    fontSize = 13.sp
-                                                    )
-                                                }
-                                            }
+
+                                                fontSize = 13.sp,
+
+                                                fontWeight =
+                                                    FontWeight.Medium
+                                            )
                                         }
+
+
+                                        Column(
+                                            horizontalAlignment =
+                                                androidx.compose.ui.Alignment.End
+                                        ) {
+
+                                            Text(
+                                                text = "Vencimento",
+
+                                                fontSize = 11.sp,
+
+                                                color =
+                                                    MaterialTheme.colorScheme
+                                                        .onSurfaceVariant
+                                            )
+
+                                            Text(
+                                                text =
+                                                    formatarDataCalendario(
+                                                        vencimento
+                                                    ),
+
+                                                fontSize = 13.sp,
+
+                                                fontWeight =
+                                                    FontWeight.Medium
+                                            )
+                                        }
+                                    }
                                 }
-                            }
-                        }
-
-                        Spacer(
-                            modifier =
-                                Modifier.height(4.dp)
-                        )
-                    }
 
 
-                    // =============================================
-                    // PARCELAS DA FATURA
-                    // =============================================
+                                // =========================================
+                                // CONTEÚDO EXPANDIDO
+                                // =========================================
 
-                    items(
-                        items = parcelasCartao,
-                        key = { parcela ->
-                            parcela.id
-                        }
-                    ) { parcela ->
+                                if (estaExpandido) {
 
-                        Card(
-                            modifier =
-                                Modifier
-                                    .fillMaxWidth()
-                                    .padding(
-                                        vertical = 4.dp
+                                    Spacer(
+                                        modifier =
+                                            Modifier.height(18.dp)
                                     )
-                        ) {
 
-                            Row(
-                                modifier =
-                                    Modifier
-                                        .fillMaxWidth()
-                                        .padding(16.dp),
-
-                                horizontalArrangement =
-                                    Arrangement
-                                        .SpaceBetween
-                            ) {
-
-                                Column {
-
-                                    Text(
-                                        text =
-                                            parcela.descricao,
-
-                                        fontWeight =
-                                            FontWeight.Bold
+                                    HorizontalDivider(
+                                        color =
+                                            MaterialTheme.colorScheme
+                                                .outlineVariant
                                     )
 
                                     Spacer(
                                         modifier =
-                                            Modifier.height(
-                                                4.dp
+                                            Modifier.height(18.dp)
+                                    )
+
+
+                                    // TOTAL / PAGO
+                                    Row(
+                                        modifier =
+                                            Modifier.fillMaxWidth(),
+
+                                        horizontalArrangement =
+                                            Arrangement.SpaceBetween
+                                    ) {
+
+                                        Column {
+
+                                            Text(
+                                                text = "Total da fatura",
+                                                fontSize = 12.sp,
+                                                color =
+                                                    MaterialTheme.colorScheme
+                                                        .onSurfaceVariant
                                             )
-                                    )
 
-                                    Text(
-                                        text =
-                                            "${parcela.numeroParcela}/" +
-                                                    parcela.totalParcelas,
+                                            Text(
+                                                text =
+                                                    formatarDinheiro(
+                                                        totalFatura
+                                                    ),
 
-                                        fontSize =
-                                            13.sp
-                                    )
-                                    if (parcela.quitadaAnteriormente) {
+                                                fontSize = 15.sp,
+
+                                                fontWeight =
+                                                    FontWeight.SemiBold
+                                            )
+                                        }
+
+
+                                        Column(
+                                            horizontalAlignment =
+                                                androidx.compose.ui.Alignment.End
+                                        ) {
+
+                                            Text(
+                                                text = "Pago",
+                                                fontSize = 12.sp,
+                                                color =
+                                                    MaterialTheme.colorScheme
+                                                        .onSurfaceVariant
+                                            )
+
+                                            Text(
+                                                text =
+                                                    formatarDinheiro(
+                                                        totalPago
+                                                    ),
+
+                                                fontSize = 15.sp,
+
+                                                fontWeight =
+                                                    FontWeight.SemiBold,
+
+                                                color =
+                                                    BlikPrimary
+                                            )
+                                        }
+                                    }
+
+
+                                    // =====================================
+                                    // PAGAR FATURA
+                                    // =====================================
+
+                                    if (restante > 0.01) {
 
                                         Spacer(
                                             modifier =
-                                                Modifier.height(4.dp)
+                                                Modifier.height(16.dp)
                                         )
+
+                                        Button(
+                                            onClick = {
+
+                                                cartaoParaPagamento =
+                                                    cartaoId
+
+                                                nomeCartaoParaPagamento =
+                                                    primeiraParcela.cartaoNome
+
+                                                valorRestantePagamento =
+                                                    restante
+
+                                                valorPagamento =
+                                                    String.format(
+                                                        Locale.getDefault(),
+                                                        "%.2f",
+                                                        restante
+                                                    )
+                                                        .replace(
+                                                            ".",
+                                                            ","
+                                                        )
+
+                                                contaPagamento =
+                                                    contas.firstOrNull()
+
+                                                mensagemPagamento =
+                                                    ""
+                                            },
+
+                                            modifier =
+                                                Modifier
+                                                    .fillMaxWidth()
+                                                    .height(50.dp),
+
+                                            shape =
+                                                androidx.compose.foundation.shape
+                                                    .RoundedCornerShape(14.dp),
+
+                                            colors =
+                                                androidx.compose.material3.ButtonDefaults
+                                                    .buttonColors(
+                                                        containerColor =
+                                                            MaterialTheme.colorScheme.primary,
+
+                                                        contentColor =
+                                                            MaterialTheme.colorScheme.onPrimary
+                                                    ),
+
+                                            elevation =
+                                                androidx.compose.material3.ButtonDefaults
+                                                    .buttonElevation(
+                                                        defaultElevation = 0.dp,
+                                                        pressedElevation = 1.dp
+                                                    )
+                                        ) {
+
+                                            Text(
+                                                text = "Pagar fatura",
+                                                fontSize = 15.sp,
+                                                fontWeight = FontWeight.SemiBold
+                                            )
+                                        }
+                                    }
+
+
+                                    Spacer(
+                                        modifier =
+                                            Modifier.height(20.dp)
+                                    )
+
+
+                                    // =====================================
+                                    // COMPRAS
+                                    // =====================================
+
+                                    Text(
+                                        text = "Compras",
+
+                                        fontSize = 16.sp,
+
+                                        fontWeight =
+                                            FontWeight.SemiBold
+                                    )
+
+
+                                    Spacer(
+                                        modifier =
+                                            Modifier.height(8.dp)
+                                    )
+
+
+                                    parcelasCartao
+                                        .forEach { parcela ->
+
+                                            Row(
+                                                modifier =
+                                                    Modifier
+                                                        .fillMaxWidth()
+                                                        .padding(
+                                                            vertical = 9.dp
+                                                        ),
+
+                                                verticalAlignment =
+                                                    androidx.compose.ui.Alignment
+                                                        .CenterVertically
+                                            ) {
+
+                                                Column(
+                                                    modifier =
+                                                        Modifier.weight(1f)
+                                                ) {
+
+                                                    Text(
+                                                        text =
+                                                            parcela.descricao,
+
+                                                        fontSize = 14.sp,
+
+                                                        fontWeight =
+                                                            FontWeight.Medium,
+
+                                                        color =
+                                                            if (
+                                                                parcela.quitadaAnteriormente
+                                                            ) {
+
+                                                                MaterialTheme.colorScheme
+                                                                    .onSurfaceVariant
+
+                                                            } else {
+
+                                                                MaterialTheme.colorScheme
+                                                                    .onSurface
+                                                            }
+                                                    )
+
+
+                                                    Spacer(
+                                                        modifier =
+                                                            Modifier.height(2.dp)
+                                                    )
+
+
+                                                    Text(
+                                                        text =
+                                                            "${parcela.numeroParcela}/" +
+                                                                    parcela.totalParcelas,
+
+                                                        fontSize = 12.sp,
+
+                                                        color =
+                                                            MaterialTheme.colorScheme
+                                                                .onSurfaceVariant
+                                                    )
+
+
+                                                    if (
+                                                        parcela.quitadaAnteriormente
+                                                    ) {
+
+                                                        Text(
+                                                            text =
+                                                                "Quitada anteriormente",
+
+                                                            fontSize = 11.sp,
+
+                                                            color =
+                                                                MaterialTheme.colorScheme
+                                                                    .onSurfaceVariant
+                                                        )
+                                                    }
+                                                }
+
+
+                                                Spacer(
+                                                    modifier =
+                                                        Modifier.width(12.dp)
+                                                )
+
+
+                                                Text(
+                                                    text =
+                                                        formatarDinheiro(
+                                                            parcela.valor
+                                                        ),
+
+                                                    fontSize = 14.sp,
+
+                                                    fontWeight =
+                                                        FontWeight.SemiBold,
+
+                                                    color =
+                                                        if (
+                                                            parcela.quitadaAnteriormente
+                                                        ) {
+
+                                                            MaterialTheme.colorScheme
+                                                                .onSurfaceVariant
+
+                                                        } else {
+
+                                                            MaterialTheme.colorScheme
+                                                                .onSurface
+                                                        }
+                                                )
+                                            }
+                                        }
+
+
+                                    // =====================================
+                                    // PAGAMENTOS
+                                    // =====================================
+
+                                    if (
+                                        pagamentosDoCartao.isNotEmpty()
+                                    ) {
+
+                                        Spacer(
+                                            modifier =
+                                                Modifier.height(14.dp)
+                                        )
+
+                                        HorizontalDivider(
+                                            color =
+                                                MaterialTheme.colorScheme
+                                                    .outlineVariant
+                                        )
+
+                                        Spacer(
+                                            modifier =
+                                                Modifier.height(14.dp)
+                                        )
+
 
                                         Text(
-                                            text = "Quitada anteriormente",
-                                            fontSize = 12.sp,
-                                            fontWeight = FontWeight.Medium
+                                            text = "Pagamentos",
+
+                                            fontSize = 15.sp,
+
+                                            fontWeight =
+                                                FontWeight.SemiBold
                                         )
+
+
+                                        Spacer(
+                                            modifier =
+                                                Modifier.height(6.dp)
+                                        )
+
+
+                                        pagamentosDoCartao
+                                            .forEach { pagamento ->
+
+                                                Row(
+                                                    modifier =
+                                                        Modifier
+                                                            .fillMaxWidth()
+                                                            .clickable {
+
+                                                                pagamentoParaExcluir =
+                                                                    pagamento
+                                                            }
+                                                            .padding(
+                                                                vertical = 8.dp
+                                                            ),
+
+                                                    horizontalArrangement =
+                                                        Arrangement.SpaceBetween
+                                                ) {
+
+                                                    Column {
+
+                                                        Text(
+                                                            text =
+                                                                pagamento.dataPagamento,
+
+                                                            fontSize = 13.sp
+                                                        )
+
+                                                        Text(
+                                                            text =
+                                                                pagamento.contaNome,
+
+                                                            fontSize = 11.sp,
+
+                                                            color =
+                                                                MaterialTheme.colorScheme
+                                                                    .onSurfaceVariant
+                                                        )
+                                                    }
+
+
+                                                    Text(
+                                                        text =
+                                                            formatarDinheiro(
+                                                                pagamento.valorPago
+                                                            ),
+
+                                                        fontSize = 14.sp,
+
+                                                        fontWeight =
+                                                            FontWeight.Bold,
+
+                                                        color =
+                                                            BlikPrimary
+                                                    )
+                                                }
+                                            }
                                     }
                                 }
-
-
-                                Text(
-                                    text =
-                                        formatarDinheiro(
-                                            parcela.valor
-                                        ),
-
-                                    fontWeight =
-                                        FontWeight.Bold
-                                )
                             }
                         }
                     }
-
 
                     item {
 
@@ -6178,153 +8102,6 @@ fun TelaFaturas(
                 )
             }
         }
-
-
-        // =========================================================
-        // POPUP - SELECIONAR MÊS
-        // =========================================================
-
-        if (mostrarSelecaoMes) {
-
-            AlertDialog(
-                onDismissRequest = {
-                    mostrarSelecaoMes = false
-                },
-
-                title = {
-                    Text("Selecionar mês")
-                },
-
-                text = {
-
-                    LazyColumn {
-
-                        items(
-                            items =
-                                nomesMeses
-                                    .mapIndexed {
-                                            indice,
-                                            nome ->
-
-                                        (indice + 1) to nome
-                                    }
-                        ) { mes ->
-
-                            Button(
-                                onClick = {
-
-                                    mesSelecionado =
-                                        mes.first
-
-                                    mostrarSelecaoMes =
-                                        false
-                                },
-
-                                modifier =
-                                    Modifier
-                                        .fillMaxWidth()
-                            ) {
-
-                                Text(
-                                    text = mes.second
-                                )
-                            }
-
-                            Spacer(
-                                modifier =
-                                    Modifier.height(6.dp)
-                            )
-                        }
-                    }
-                },
-
-                confirmButton = {},
-
-                dismissButton = {
-
-                    TextButton(
-                        onClick = {
-                            mostrarSelecaoMes =
-                                false
-                        }
-                    ) {
-
-                        Text("Cancelar")
-                    }
-                }
-            )
-        }
-
-
-        // =========================================================
-        // POPUP - SELECIONAR ANO
-        // =========================================================
-
-        if (mostrarSelecaoAno) {
-
-            AlertDialog(
-                onDismissRequest = {
-                    mostrarSelecaoAno = false
-                },
-
-                title = {
-                    Text("Selecionar ano")
-                },
-
-                text = {
-
-                    Column {
-
-                        anosDisponiveis
-                            .forEach { ano ->
-
-                                Button(
-                                    onClick = {
-
-                                        anoSelecionado =
-                                            ano
-
-                                        mostrarSelecaoAno =
-                                            false
-                                    },
-
-                                    modifier =
-                                        Modifier
-                                            .fillMaxWidth()
-                                ) {
-
-                                    Text(
-                                        text =
-                                            ano.toString()
-                                    )
-                                }
-
-                                Spacer(
-                                    modifier =
-                                        Modifier.height(6.dp)
-                                )
-                            }
-                    }
-                },
-
-                confirmButton = {},
-
-                dismissButton = {
-
-                    TextButton(
-                        onClick = {
-                            mostrarSelecaoAno =
-                                false
-                        }
-                    ) {
-
-                        Text("Cancelar")
-                    }
-                }
-            )
-        }
-
-
         // =========================================================
         // POPUP - PAGAR FATURA
         // =========================================================
@@ -6343,22 +8120,11 @@ fun TelaFaturas(
 
                 title = {
 
-                    Text(
-                        text =
-                            "Pagar $nomeCartaoParaPagamento"
-                    )
-                },
-
-                text = {
-
                     Column {
 
                         Text(
                             text =
-                                "Em aberto: " +
-                                        formatarDinheiro(
-                                            valorRestantePagamento
-                                        ),
+                                "Pagar fatura",
 
                             fontWeight =
                                 FontWeight.Bold
@@ -6366,16 +8132,110 @@ fun TelaFaturas(
 
                         Spacer(
                             modifier =
-                                Modifier.height(12.dp)
+                                Modifier.height(2.dp)
                         )
 
+                        Text(
+                            text =
+                                nomeCartaoParaPagamento,
+
+                            fontSize = 13.sp,
+
+                            fontWeight =
+                                FontWeight.Normal,
+
+                            color =
+                                MaterialTheme.colorScheme
+                                    .onSurfaceVariant
+                        )
+                    }
+                },
+
+                text = {
+
+                    Column(
+                        modifier =
+                            Modifier.fillMaxWidth()
+                    ) {
+
+
+                        // =========================================
+                        // VALOR EM ABERTO
+                        // =========================================
+
+                        Box(
+                            modifier =
+                                Modifier
+                                    .fillMaxWidth()
+                                    .background(
+                                        color =
+                                            BlikFaturaContainer,
+
+                                        shape =
+                                            androidx.compose.foundation.shape
+                                                .RoundedCornerShape(
+                                                    16.dp
+                                                )
+                                    )
+                                    .padding(
+                                        horizontal = 16.dp,
+                                        vertical = 14.dp
+                                    )
+                        ) {
+
+                            Column {
+
+                                Text(
+                                    text = "Em aberto",
+
+                                    fontSize = 12.sp,
+
+                                    color =
+                                        MaterialTheme.colorScheme
+                                            .onSurfaceVariant
+                                )
+
+                                Spacer(
+                                    modifier =
+                                        Modifier.height(2.dp)
+                                )
+
+                                Text(
+                                    text =
+                                        formatarDinheiro(
+                                            valorRestantePagamento
+                                        ),
+
+                                    fontSize = 21.sp,
+
+                                    fontWeight =
+                                        FontWeight.Bold,
+
+                                    color =
+                                        BlikFatura
+                                )
+                            }
+                        }
+
+
+                        Spacer(
+                            modifier =
+                                Modifier.height(18.dp)
+                        )
+
+
+                        // =========================================
+                        // VALOR DO PAGAMENTO
+                        // =========================================
 
                         OutlinedTextField(
                             value =
                                 valorPagamento,
 
                             onValueChange = {
+
                                 valorPagamento = it
+
                                 mensagemPagamento = ""
                             },
 
@@ -6386,59 +8246,154 @@ fun TelaFaturas(
                             },
 
                             modifier =
-                                Modifier.fillMaxWidth()
+                                Modifier.fillMaxWidth(),
+
+                            singleLine = true,
+
+                            shape =
+                                androidx.compose.foundation.shape
+                                    .RoundedCornerShape(
+                                        14.dp
+                                    )
                         )
 
 
                         Spacer(
                             modifier =
-                                Modifier.height(12.dp)
+                                Modifier.height(16.dp)
                         )
 
 
-                        Button(
-                            onClick = {
-                                mostrarSelecaoContaPagamento =
-                                    true
-                            },
+                        // =========================================
+                        // CONTA
+                        // =========================================
 
+                        Text(
+                            text = "Conta do pagamento",
+
+                            fontSize = 13.sp,
+
+                            fontWeight =
+                                FontWeight.Medium,
+
+                            color =
+                                MaterialTheme.colorScheme
+                                    .onSurfaceVariant
+                        )
+
+
+                        Spacer(
                             modifier =
-                                Modifier.fillMaxWidth()
-                        ) {
+                                Modifier.height(6.dp)
+                        )
+
+
+                        if (contas.isNotEmpty()) {
+
+                            DropdownBlik(
+                                valorSelecionado =
+                                    contaPagamento
+                                        ?.nome
+                                        ?: "Selecione",
+
+                                opcoes =
+                                    contas.map { conta ->
+                                        conta.nome
+                                    },
+
+                                modifier =
+                                    Modifier.fillMaxWidth(),
+
+                                onSelecionar = { nomeConta ->
+
+                                    contaPagamento =
+                                        contas.firstOrNull { conta ->
+                                            conta.nome ==
+                                                    nomeConta
+                                        }
+
+                                    mensagemPagamento =
+                                        ""
+                                }
+                            )
+
+                        } else {
 
                             Text(
                                 text =
-                                    "Conta: ${
-                                        contaPagamento
-                                            ?.nome
-                                            ?: "Selecione"
-                                    }"
+                                    "Nenhuma conta disponível.",
+
+                                fontSize = 13.sp,
+
+                                color =
+                                    MaterialTheme.colorScheme.error
                             )
                         }
 
 
                         Spacer(
                             modifier =
-                                Modifier.height(12.dp)
+                                Modifier.height(16.dp)
                         )
 
 
-                        Button(
+                        // =========================================
+                        // DATA
+                        // =========================================
+
+                        Text(
+                            text = "Data do pagamento",
+
+                            fontSize = 13.sp,
+
+                            fontWeight =
+                                FontWeight.Medium,
+
+                            color =
+                                MaterialTheme.colorScheme
+                                    .onSurfaceVariant
+                        )
+
+
+                        Spacer(
+                            modifier =
+                                Modifier.height(6.dp)
+                        )
+
+
+                        androidx.compose.material3.OutlinedButton(
                             onClick = {
+
                                 mostrarCalendarioPagamento =
                                     true
                             },
 
                             modifier =
-                                Modifier.fillMaxWidth()
+                                Modifier.fillMaxWidth(),
+
+                            shape =
+                                androidx.compose.foundation.shape
+                                    .RoundedCornerShape(
+                                        14.dp
+                                    )
                         ) {
 
                             Text(
                                 text =
-                                    "Data: $dataPagamento"
+                                    dataPagamento,
+
+                                modifier =
+                                    Modifier.fillMaxWidth(),
+
+                                textAlign =
+                                    TextAlign.Center
                             )
                         }
 
+
+                        // =========================================
+                        // ERRO
+                        // =========================================
 
                         if (
                             mensagemPagamento
@@ -6447,12 +8402,18 @@ fun TelaFaturas(
 
                             Spacer(
                                 modifier =
-                                    Modifier.height(8.dp)
+                                    Modifier.height(10.dp)
                             )
+
 
                             Text(
                                 text =
-                                    mensagemPagamento
+                                    mensagemPagamento,
+
+                                fontSize = 12.sp,
+
+                                color =
+                                    MaterialTheme.colorScheme.error
                             )
                         }
                     }
@@ -6544,131 +8505,197 @@ fun TelaFaturas(
             )
         }
 
+        pagamentoParaExcluir?.let { pagamento ->
 
-        // =========================================================
-        // POPUP - CONTA DO PAGAMENTO
-        // =========================================================
-
-        if (mostrarSelecaoContaPagamento) {
-
-            AlertDialog(
-                onDismissRequest = {
-                    mostrarSelecaoContaPagamento =
-                        false
-                },
-
-                title = {
-                    Text("Conta do pagamento")
-                },
-
-                text = {
-
-                    Column {
-
-                        if (contas.isEmpty()) {
-
-                            Text(
-                                "Nenhuma conta disponível."
-                            )
-
-                        } else {
-
-                            contas.forEach { conta ->
-
-                                Button(
-                                    onClick = {
-
-                                        contaPagamento =
-                                            conta
-
-                                        mostrarSelecaoContaPagamento =
-                                            false
-                                    },
-
-                                    modifier =
-                                        Modifier
-                                            .fillMaxWidth()
-                                ) {
-
-                                    Text(conta.nome)
-                                }
-
-                                Spacer(
-                                    modifier =
-                                        Modifier.height(
-                                            6.dp
-                                        )
-                                )
-                            }
-                        }
-                    }
-                },
-
-                confirmButton = {},
-
-                dismissButton = {
-
-                    TextButton(
-                        onClick = {
-                            mostrarSelecaoContaPagamento =
-                                false
-                        }
-                    ) {
-
-                        Text("Cancelar")
-                    }
-                }
-            )
-        }
-
-        pagamentoParaExcluir?.let {pagamento ->
             AlertDialog(
                 onDismissRequest = {
                     pagamentoParaExcluir = null
                 },
+
                 title = {
-                    Text(
-                        "Excluir pagamento?"
-                    )
-                },
-                text = {
+
                     Column {
+
                         Text(
-                            text = "Pagamento de ${formatarDinheiro(pagamento.valorPago)}"
+                            text = "Excluir pagamento?",
+                            fontWeight = FontWeight.Bold
                         )
+
                         Spacer(
-                            modifier = Modifier.height(6.dp)
+                            modifier = Modifier.height(2.dp)
                         )
+
                         Text(
-                            text = "Conta: ${pagamento.contaNome}"
-                        )
-                        Text(
-                            text = "data: ${pagamento.dataPagamento}"
-                        )
-                        Spacer(
-                            modifier = Modifier.height(12.dp)
-                        )
-                        Text(
-                            text = "O valor voltará a ficar em aberto na fatura."
+                            text = "Revise os dados antes de continuar",
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Normal,
+                            color =
+                                MaterialTheme.colorScheme
+                                    .onSurfaceVariant
                         )
                     }
                 },
+
+                text = {
+
+                    Column(
+                        modifier =
+                            Modifier.fillMaxWidth()
+                    ) {
+
+
+                        // =====================================
+                        // VALOR
+                        // =====================================
+
+                        Box(
+                            modifier =
+                                Modifier
+                                    .fillMaxWidth()
+                                    .background(
+                                        color =
+                                            BlikSaidaContainer,
+
+                                        shape =
+                                            androidx.compose.foundation.shape
+                                                .RoundedCornerShape(
+                                                    16.dp
+                                                )
+                                    )
+                                    .padding(
+                                        horizontal = 16.dp,
+                                        vertical = 14.dp
+                                    )
+                        ) {
+
+                            Column {
+
+                                Text(
+                                    text = "Pagamento",
+
+                                    fontSize = 12.sp,
+
+                                    color =
+                                        MaterialTheme.colorScheme
+                                            .onSurfaceVariant
+                                )
+
+                                Spacer(
+                                    modifier =
+                                        Modifier.height(2.dp)
+                                )
+
+                                Text(
+                                    text =
+                                        formatarDinheiro(
+                                            pagamento.valorPago
+                                        ),
+
+                                    fontSize = 21.sp,
+
+                                    fontWeight =
+                                        FontWeight.Bold,
+
+                                    color =
+                                        BlikSaida
+                                )
+                            }
+                        }
+
+
+                        Spacer(
+                            modifier =
+                                Modifier.height(18.dp)
+                        )
+
+
+                        DetalheMovimentacao(
+                            titulo = "Conta",
+                            valor = pagamento.contaNome
+                        )
+
+
+                        DetalheMovimentacao(
+                            titulo = "Data",
+                            valor = pagamento.dataPagamento
+                        )
+
+
+                        Spacer(
+                            modifier =
+                                Modifier.height(16.dp)
+                        )
+
+
+                        Box(
+                            modifier =
+                                Modifier
+                                    .fillMaxWidth()
+                                    .background(
+                                        color =
+                                            MaterialTheme.colorScheme
+                                                .surfaceVariant,
+
+                                        shape =
+                                            androidx.compose.foundation.shape
+                                                .RoundedCornerShape(
+                                                    14.dp
+                                                )
+                                    )
+                                    .padding(
+                                        12.dp
+                                    )
+                        ) {
+
+                            Text(
+                                text =
+                                    "Ao excluir este pagamento, " +
+                                            "o valor voltará a ficar em aberto na fatura.",
+
+                                fontSize = 13.sp,
+
+                                color =
+                                    MaterialTheme.colorScheme
+                                        .onSurfaceVariant
+                            )
+                        }
+                    }
+                },
+
                 confirmButton = {
+
                     TextButton(
                         onClick = {
-                            onExcluirPagamento(pagamento)
-                            pagamentoParaExcluir = null
+
+                            onExcluirPagamento(
+                                pagamento
+                            )
+
+                            pagamentoParaExcluir =
+                                null
                         }
                     ) {
-                        Text("Excluir")
+
+                        Text(
+                            text = "Excluir",
+                            color =
+                                MaterialTheme.colorScheme.error,
+
+                            fontWeight =
+                                FontWeight.SemiBold
+                        )
                     }
                 },
+
                 dismissButton = {
+
                     TextButton(
                         onClick = {
-                            pagamentoParaExcluir = null
+                            pagamentoParaExcluir =
+                                null
                         }
                     ) {
+
                         Text("Cancelar")
                     }
                 }
@@ -6781,20 +8808,16 @@ fun gerarParcelasCartao(
     quantidadeParcelas: Int,
     dataCompra: String,
     diaFechamento: Int,
-    parcelaAtual: Int = 1,
-    mesFaturaReferencia: Int? = null,
-    anoFaturaReferencia: Int? = null
+    diaVencimento: Int,
+
+    // null = movimentação nova:
+    // calcula automaticamente o histórico.
+    //
+    // Set, mesmo vazio = edição:
+    // preserva exatamente o histórico já existente.
+    quitadasAnteriormentePreservadas: Set<Int>? = null
+
 ): List<ParcelaCartaoEntity> {
-
-    if (quantidadeParcelas <= 0) {
-        return emptyList()
-    }
-
-    val parcelaAtualValida =
-        parcelaAtual.coerceIn(
-            1,
-            quantidadeParcelas
-        )
 
     val partes =
         dataCompra.split("/")
@@ -6802,6 +8825,7 @@ fun gerarParcelasCartao(
     if (partes.size != 3) {
         return emptyList()
     }
+
 
     val diaCompra =
         partes[0].toIntOrNull()
@@ -6816,125 +8840,179 @@ fun gerarParcelasCartao(
             ?: return emptyList()
 
 
-    var mesPrimeiraFatura: Int
-    var anoPrimeiraFatura: Int
+    // =====================================================
+    // PRIMEIRA FATURA
+    // =====================================================
+
+    var mesPrimeiraFatura =
+        mesCompra
+
+    var anoPrimeiraFatura =
+        anoCompra
 
 
-    if (parcelaAtualValida == 1) {
+    if (diaCompra > diaFechamento) {
 
-        // ==========================================
-        // COMPRA NOVA
-        // Mantém exatamente a lógica que já tínhamos
-        // ==========================================
+        mesPrimeiraFatura++
 
-        mesPrimeiraFatura =
-            mesCompra
+        if (mesPrimeiraFatura > 12) {
 
-        anoPrimeiraFatura =
-            anoCompra
-
-        if (diaCompra > diaFechamento) {
-
-            mesPrimeiraFatura++
-
-            if (mesPrimeiraFatura > 12) {
-                mesPrimeiraFatura = 1
-                anoPrimeiraFatura++
-            }
-        }
-
-    } else {
-
-        // ==========================================
-        // COMPRA ANTIGA JÁ EM ANDAMENTO
-        // ==========================================
-
-        val hoje =
-            java.util.Calendar.getInstance()
-
-        val mesFaturaAtual =
-            mesFaturaReferencia
-                ?: (
-                        hoje.get(
-                            java.util.Calendar.MONTH
-                        ) + 1
-                        )
-
-        val anoFaturaAtual =
-            anoFaturaReferencia
-                ?: hoje.get(
-                    java.util.Calendar.YEAR
-                )
-
-        /*
-         * A parcela escolhida pelo usuário será
-         * considerada a parcela da fatura atual.
-         *
-         * Exemplo:
-         * parcelaAtual = 7
-         *
-         * Precisamos descobrir em qual mês caiu
-         * a parcela 1.
-         */
-
-        mesPrimeiraFatura =
-            mesFaturaAtual
-
-        anoPrimeiraFatura =
-            anoFaturaAtual
-
-        repeat(
-            parcelaAtualValida - 1
-        ) {
-
-            mesPrimeiraFatura--
-
-            if (mesPrimeiraFatura < 1) {
-
-                mesPrimeiraFatura = 12
-                anoPrimeiraFatura--
-            }
+            mesPrimeiraFatura = 1
+            anoPrimeiraFatura++
         }
     }
 
 
-    // ==========================================
-    // DIVISÃO DO VALOR EM CENTAVOS
-    // ==========================================
+    // =====================================================
+    // DATA ATUAL SEM HORÁRIO
+    // =====================================================
+
+    val hoje =
+        java.util.Calendar
+            .getInstance()
+            .apply {
+
+                set(
+                    java.util.Calendar.HOUR_OF_DAY,
+                    0
+                )
+
+                set(
+                    java.util.Calendar.MINUTE,
+                    0
+                )
+
+                set(
+                    java.util.Calendar.SECOND,
+                    0
+                )
+
+                set(
+                    java.util.Calendar.MILLISECOND,
+                    0
+                )
+            }
+
+
+    // =====================================================
+    // VALOR DAS PARCELAS EM CENTAVOS
+    // =====================================================
 
     val valorTotalCentavos =
         kotlin.math.round(
             valorTotal * 100
         ).toLong()
 
+
     val valorBaseCentavos =
         valorTotalCentavos /
                 quantidadeParcelas
+
 
     val restoCentavos =
         valorTotalCentavos %
                 quantidadeParcelas
 
 
-    // ==========================================
-    // GERA TODAS AS PARCELAS
-    // ==========================================
+    // =====================================================
+    // GERAR PARCELAS
+    // =====================================================
 
     return (1..quantidadeParcelas)
         .map { numero ->
 
-            var mes =
-                mesPrimeiraFatura +
-                        numero - 1
 
-            var ano =
-                anoPrimeiraFatura
+            // Descobre mês/ano da parcela
+            val calendarioFatura =
+                java.util.Calendar
+                    .getInstance()
+                    .apply {
 
-            while (mes > 12) {
-                mes -= 12
-                ano++
-            }
+                        clear()
 
+                        set(
+                            java.util.Calendar.YEAR,
+                            anoPrimeiraFatura
+                        )
+
+                        set(
+                            java.util.Calendar.MONTH,
+                            mesPrimeiraFatura - 1
+                        )
+
+                        set(
+                            java.util.Calendar.DAY_OF_MONTH,
+                            1
+                        )
+
+                        add(
+                            java.util.Calendar.MONTH,
+                            numero - 1
+                        )
+                    }
+
+
+            val mesFatura =
+                calendarioFatura.get(
+                    java.util.Calendar.MONTH
+                ) + 1
+
+
+            val anoFatura =
+                calendarioFatura.get(
+                    java.util.Calendar.YEAR
+                )
+
+
+            // =============================================
+            // VENCIMENTO DA FATURA
+            // =============================================
+
+            val vencimento =
+                calcularVencimentoFatura(
+                    mesFatura =
+                        mesFatura,
+
+                    anoFatura =
+                        anoFatura,
+
+                    diaFechamento =
+                        diaFechamento,
+
+                    diaVencimento =
+                        diaVencimento
+                )
+
+
+            // =============================================
+            // HISTÓRICO
+            // =============================================
+
+            val quitadaAnteriormente =
+                if (
+                    quitadasAnteriormentePreservadas != null
+                ) {
+
+                    // EDIÇÃO:
+                    // não recalcula com base na data de hoje.
+                    numero in
+                            quitadasAnteriormentePreservadas
+
+                } else {
+
+                    // NOVA MOVIMENTAÇÃO:
+                    // se o vencimento daquela parcela já passou,
+                    // consideramos que ela foi quitada antes
+                    // do controle pelo Blik.
+                    vencimento.before(
+                        hoje
+                    )
+                }
+
+
+            // =============================================
+            // VALOR
+            // =============================================
 
             val valorParcelaCentavos =
                 if (
@@ -6969,14 +9047,13 @@ fun gerarParcelasCartao(
                             100.0,
 
                 mesFatura =
-                    mes,
+                    mesFatura,
 
                 anoFatura =
-                    ano,
+                    anoFatura,
 
                 quitadaAnteriormente =
-                    numero <
-                            parcelaAtualValida
+                    quitadaAnteriormente
             )
         }
 }
