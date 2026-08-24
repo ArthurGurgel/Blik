@@ -452,6 +452,7 @@ fun AppFinanceiro() {
                 contas = contas,
                 categorias = categorias,
                 cartoes = cartoes,
+                parcelasCartao = parcelasCartao,
 
                 onSalvar = { novaMovimentacao ->
 
@@ -542,6 +543,7 @@ fun AppFinanceiro() {
                 categorias = categorias,
                 cartoes = cartoes,
                 movimentacaoParaEditar = movimentacaoEmEdicao,
+                parcelasCartao = parcelasCartao,
 
                 onSalvar = { movimentacao ->
 
@@ -560,6 +562,26 @@ fun AppFinanceiro() {
                             quantidadeParcelas = movimentacao.quantidadeParcelas,
                             data = movimentacao.data
                         )
+
+                        val parcelaReferencia =
+                            parcelasCartao
+                                .filter { parcela ->
+                                    parcela.movimentacaoId ==
+                                            movimentacao.id &&
+                                            !parcela.quitadaAnteriormente
+                                }
+                                .minByOrNull { parcela ->
+                                    parcela.numeroParcela
+                                }
+
+                        val mesFaturaReferencia =
+                            parcelaReferencia?.mesFatura
+
+                        val anoFaturaReferencia =
+                            parcelaReferencia?.anoFatura
+
+
+
                         parcelaCartaoDao.excluirPorMovimentacao(
                             movimentacao.id
                         )
@@ -585,7 +607,9 @@ fun AppFinanceiro() {
                                         quantidadeParcelas = movimentacao.quantidadeParcelas,
                                         dataCompra = movimentacao.data,
                                         diaFechamento = cartao.diaFechamento,
-                                        parcelaAtual = movimentacao.parcelaAtual
+                                        parcelaAtual = movimentacao.parcelaAtual,
+                                        mesFaturaReferencia = mesFaturaReferencia,
+                                        anoFaturaReferencia = anoFaturaReferencia
                                     )
                                 parcelaCartaoDao.inserirTodas(
                                     parcelas
@@ -1120,80 +1144,167 @@ fun TelaInicial(
            ) {
                item {
                    Card(
-                       modifier = Modifier.fillMaxWidth()
+                       modifier = Modifier.fillMaxWidth(),
+                       shape =
+                           androidx.compose.foundation.shape.RoundedCornerShape(
+                               24.dp
+                           ),
+                       colors =
+                           androidx.compose.material3.CardDefaults.cardColors(
+                               containerColor =
+                                   MaterialTheme.colorScheme.primaryContainer
+                           )
                    ) {
 
                        Column(
-                           modifier = Modifier.padding(20.dp)
+                           modifier =
+                               Modifier.padding(
+                                   horizontal = 22.dp,
+                                   vertical = 20.dp
+                               )
                        ) {
 
                            Text(
                                text = "Saldo total",
-                               fontSize = 14.sp
+                               fontSize = 16.sp,
+                               color =
+                                   MaterialTheme.colorScheme
+                                       .onPrimaryContainer
+                                       .copy(alpha = 0.80f)
                            )
 
                            Spacer(
-                               modifier = Modifier.height(4.dp)
+                               modifier = Modifier.height(1.dp)
                            )
 
                            Text(
-                               text = formatarDinheiro(saldoAtual),
-                               fontSize = 30.sp,
-                               fontWeight = FontWeight.Bold
+                               text =
+                                   formatarDinheiro(
+                                       saldoAtual
+                                   ),
+                               fontSize = 32.sp,
+                               fontWeight = FontWeight.Bold,
+                               color =
+                                   MaterialTheme.colorScheme
+                                       .onPrimaryContainer
                            )
 
                            Spacer(
-                               modifier = Modifier.height(18.dp)
+                               modifier = Modifier.height(16.dp)
                            )
 
                            Row(
-                               modifier = Modifier.fillMaxWidth(),
-                               horizontalArrangement = Arrangement.SpaceBetween,
-                               verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+                               modifier =
+                                   Modifier.fillMaxWidth(),
+                               horizontalArrangement =
+                                   Arrangement.SpaceBetween,
+                               verticalAlignment =
+                                   androidx.compose.ui.Alignment
+                                       .Top
                            ) {
+
                                Column(
-                                   modifier = Modifier.weight(1f)
+                                   modifier =
+                                       Modifier.weight(1f)
                                ) {
+
                                    Text(
                                        text = "Entradas",
-                                       fontSize = 12.sp
+                                       fontSize = 14.sp,
+                                       fontWeight = FontWeight.Medium,
+                                       color =
+                                           MaterialTheme.colorScheme
+                                               .onPrimaryContainer
+                                               .copy(alpha = 0.70f)
+                                   )
+
+                                   Spacer(
+                                       modifier =
+                                           Modifier.height(0.dp)
                                    )
 
                                    Text(
-                                       text = formatarDinheiro(entradasDoMes),
-                                       fontWeight = FontWeight.Bold,
-                                       fontSize = 17.sp
+                                       text =
+                                           formatarDinheiro(
+                                               entradasDoMes
+                                           ),
+                                       fontWeight =
+                                           FontWeight.SemiBold,
+                                       fontSize = 16.sp,
+                                       color =
+                                           MaterialTheme.colorScheme
+                                               .onPrimaryContainer
                                    )
                                }
 
                                Column(
-                                   modifier = Modifier.weight(1f),
-                                   horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally
+                                   modifier =
+                                       Modifier.weight(1f),
+                                   horizontalAlignment =
+                                       androidx.compose.ui.Alignment
+                                           .CenterHorizontally
                                ) {
+
                                    Text(
                                        text = periodoAtual,
-                                       fontSize = 13.sp,
-                                       fontWeight = FontWeight.Medium,
+                                       fontSize = 12.sp,
+                                       fontWeight =
+                                           FontWeight.Medium,
+                                       color =
+                                           MaterialTheme.colorScheme
+                                               .onPrimaryContainer
+                                               .copy(alpha = 0.75f)
                                    )
+
+                                   Spacer(
+                                       modifier =
+                                           Modifier.height(2.dp)
+                                   )
+
                                    Text(
-                                       text = "-",
+                                       text = "—",
                                        fontSize = 16.sp,
+                                       color =
+                                           MaterialTheme.colorScheme
+                                               .onPrimaryContainer
+                                               .copy(alpha = 0.45f)
                                    )
                                }
 
                                Column(
-                                   modifier = Modifier.weight(1f),
-                                   horizontalAlignment = androidx.compose.ui.Alignment.End
+                                   modifier =
+                                       Modifier.weight(1f),
+                                   horizontalAlignment =
+                                       androidx.compose.ui.Alignment
+                                           .End
                                ) {
+
                                    Text(
                                        text = "Saídas",
-                                       fontSize = 12.sp
+                                       fontSize = 14.sp,
+                                       fontWeight = FontWeight.Medium,
+                                       color =
+                                           MaterialTheme.colorScheme
+                                               .onPrimaryContainer
+                                               .copy(alpha = 0.70f)
+                                   )
+
+                                   Spacer(
+                                       modifier =
+                                           Modifier.height(0.dp)
                                    )
 
                                    Text(
-                                       text = formatarDinheiro(saidasDoMes),
-                                       fontWeight = FontWeight.Bold,
-                                       fontSize = 17.sp
+                                       text =
+                                           formatarDinheiro(
+                                               saidasDoMes
+                                           ),
+                                       fontWeight =
+                                           FontWeight.SemiBold,
+                                       fontSize = 16.sp,
+                                       color =
+                                           MaterialTheme.colorScheme
+                                               .onPrimaryContainer
                                    )
                                }
                            }
@@ -1357,6 +1468,7 @@ fun TelaNovaMovimentacao(
     contas: List<ContaEntity>,
     categorias: List<CategoriaEntity>,
     cartoes: List<CartaoComConta>,
+    parcelasCartao: List<ParcelaCartaoComDetalhes> = emptyList(),
     movimentacaoParaEditar: Movimentacao? = null,
     onSalvar: (Movimentacao) -> Unit,
     onVoltar: () -> Unit
@@ -1418,8 +1530,29 @@ fun TelaNovaMovimentacao(
         )
     }
 
+    val parcelaAtualExistente =
+        if (movimentacaoParaEditar != null) {
+
+            parcelasCartao
+                .filter { parcela ->
+                    parcela.movimentacaoId ==
+                            movimentacaoParaEditar.id &&
+                            !parcela.quitadaAnteriormente
+                }
+                .minByOrNull { parcela ->
+                    parcela.numeroParcela
+                }
+                ?.numeroParcela
+                ?: 1
+
+        } else {
+            1
+        }
+
     var parcelaAtual by remember {
-        mutableStateOf("1")
+        mutableStateOf(
+            parcelaAtualExistente.toString()
+        )
     }
 
     var data by remember {
@@ -5996,6 +6129,19 @@ fun TelaFaturas(
                                         fontSize =
                                             13.sp
                                     )
+                                    if (parcela.quitadaAnteriormente) {
+
+                                        Spacer(
+                                            modifier =
+                                                Modifier.height(4.dp)
+                                        )
+
+                                        Text(
+                                            text = "Quitada anteriormente",
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.Medium
+                                        )
+                                    }
                                 }
 
 
@@ -6635,7 +6781,9 @@ fun gerarParcelasCartao(
     quantidadeParcelas: Int,
     dataCompra: String,
     diaFechamento: Int,
-    parcelaAtual: Int = 1
+    parcelaAtual: Int = 1,
+    mesFaturaReferencia: Int? = null,
+    anoFaturaReferencia: Int? = null
 ): List<ParcelaCartaoEntity> {
 
     if (quantidadeParcelas <= 0) {
@@ -6704,15 +6852,19 @@ fun gerarParcelasCartao(
         val hoje =
             java.util.Calendar.getInstance()
 
-        var mesFaturaAtual =
-            hoje.get(
-                java.util.Calendar.MONTH
-            ) + 1
+        val mesFaturaAtual =
+            mesFaturaReferencia
+                ?: (
+                        hoje.get(
+                            java.util.Calendar.MONTH
+                        ) + 1
+                        )
 
-        var anoFaturaAtual =
-            hoje.get(
-                java.util.Calendar.YEAR
-            )
+        val anoFaturaAtual =
+            anoFaturaReferencia
+                ?: hoje.get(
+                    java.util.Calendar.YEAR
+                )
 
         /*
          * A parcela escolhida pelo usuário será
