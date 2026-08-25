@@ -25,6 +25,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.Image
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
@@ -53,6 +54,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -60,6 +62,8 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.graphics.Color
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.platform.LocalContext
@@ -753,22 +757,88 @@ fun AppFinanceiro() {
                 },
 
                 onExcluir = { conta, resultado ->
+
                     scope.launch {
+
                         val quantidadeMovimentacoes =
-                            dao.quantidadePorConta(conta.id)
-
-                        if (quantidadeMovimentacoes > 0){
-                            resultado(
-                                false,
-                                quantidadeMovimentacoes
+                            dao.quantidadePorConta(
+                                conta.id
                             )
-                        } else {
-                            contaDao.excluir(conta.id)
 
-                            resultado(
-                                true,
-                                0
-                            )
+                        val quantidadeCartoes =
+                            cartoes.count { cartao ->
+                                cartao.contaId == conta.id
+                            }
+
+                        val quantidadePagamentos =
+                            pagamentosFatura.count { pagamento ->
+                                pagamento.contaId == conta.id
+                            }
+
+
+                        when {
+
+                            quantidadeMovimentacoes > 0 -> {
+
+                                resultado(
+                                    false,
+                                    "Não é possível excluir a conta \"${conta.nome}\". " +
+                                            "Existem $quantidadeMovimentacoes movimentação(ões) " +
+                                            "vinculada(s) a ela. " +
+                                            "Desative a conta para preservar o histórico."
+                                )
+                            }
+
+
+                            quantidadeCartoes > 0 -> {
+
+                                resultado(
+                                    false,
+                                    "Não é possível excluir a conta \"${conta.nome}\". " +
+                                            "Existem $quantidadeCartoes cartão(ões) de crédito " +
+                                            "vinculado(s) a ela. " +
+                                            "Altere a conta vinculada ao cartão ou exclua o cartão primeiro."
+                                )
+                            }
+
+
+                            quantidadePagamentos > 0 -> {
+
+                                resultado(
+                                    false,
+                                    "Não é possível excluir a conta \"${conta.nome}\". " +
+                                            "Existem $quantidadePagamentos pagamento(s) de fatura " +
+                                            "registrado(s) nessa conta. " +
+                                            "Desative a conta para preservar o histórico."
+                                )
+                            }
+
+
+                            else -> {
+
+                                try {
+
+                                    contaDao.excluir(
+                                        conta.id
+                                    )
+
+                                    resultado(
+                                        true,
+                                        ""
+                                    )
+
+                                } catch (
+                                    e: android.database.sqlite.SQLiteConstraintException
+                                ) {
+
+                                    resultado(
+                                        false,
+                                        "Não é possível excluir a conta \"${conta.nome}\" " +
+                                                "porque ainda existem registros vinculados a ela. " +
+                                                "Desative a conta para preservar o histórico."
+                                    )
+                                }
+                            }
                         }
                     }
                 },
@@ -932,17 +1002,30 @@ fun TelaInicial(
 
     val movimentacoesDoMes =
         movimentacoes.filter { movimentacao ->
+
             val partes =
                 movimentacao.data.split("/")
 
             if (partes.size != 3) {
-                false
-            } else {
-                val mes = partes[1]
-                val ano = partes[2]
 
-                mes == mesAtual &&
-                        ano == anoAtual
+                false
+
+            } else {
+
+                val mesMovimentacao =
+                    partes[1]
+                        .toIntOrNull()
+
+                val anoMovimentacao =
+                    partes[2]
+                        .toIntOrNull()
+
+
+                mesMovimentacao ==
+                        mesAtualInt &&
+
+                        anoMovimentacao ==
+                        anoAtualInt
             }
         }
 
@@ -958,8 +1041,11 @@ fun TelaInicial(
     val saidasDoMes =
         movimentacoesDoMes
             .filter { movimentacao ->
+
                 movimentacao.tipo == "Saída"
-            } .sumOf { movimentacao ->
+            }
+            .sumOf { movimentacao ->
+
                 movimentacao.valor
             }
 
@@ -1051,29 +1137,12 @@ fun TelaInicial(
                 Column(
                     modifier =
                         Modifier.padding(
-                            horizontal = 20.dp,
-                            vertical = 12.dp
+                            horizontal = 20.dp
                         )
                 ) {
 
-                    Text(
-                        text = "Blik",
-                        fontSize = 30.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = BlikLogo
-                    )
+                    MarcaBlik()
 
-                    Spacer(
-                        modifier = Modifier.height(2.dp)
-                    )
-
-                    Text(
-                        text = "Controle financeiro",
-                        fontSize = 13.sp,
-                        color =
-                            MaterialTheme.colorScheme
-                                .onSurfaceVariant
-                    )
                 }
 
                 val coresItemDrawer =
@@ -1286,13 +1355,7 @@ fun TelaInicial(
                 TopAppBar(
 
                     title = {
-
-                        Text(
-                            text = "Blik",
-                            fontSize = 26.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = BlikLogo
-                        )
+                        MarcaBlik()
                     },
 
                     navigationIcon = {
@@ -1366,7 +1429,7 @@ fun TelaInicial(
                contentPadding = androidx.compose.foundation.layout.PaddingValues (
                    start = 20.dp,
                    end = 20.dp,
-                   top = 20.dp,
+                   top = 12.dp,
                    bottom = 100.dp
                )
            ) {
@@ -2161,11 +2224,8 @@ fun TelaNovaMovimentacao(
                 )
 
                 Spacer(
-                    modifier = Modifier.height(20.dp)
+                    modifier = Modifier.height(14.dp)
                 )
-
-
-                // DESCRIÇÃO
 
                 OutlinedTextField(
                     value = descricao,
@@ -2187,6 +2247,10 @@ fun TelaNovaMovimentacao(
                     shape =
                         androidx.compose.foundation.shape
                             .RoundedCornerShape(14.dp)
+                )
+
+                Spacer(
+                    modifier = Modifier.height(14.dp)
                 )
 
                 // VALOR
@@ -2218,7 +2282,7 @@ fun TelaNovaMovimentacao(
                 )
 
                 Spacer(
-                    modifier = Modifier.height(16.dp)
+                    modifier = Modifier.height(14.dp)
                 )
 
 
@@ -2312,7 +2376,7 @@ fun TelaNovaMovimentacao(
                 if (tipo == "Entrada") {
 
                     Spacer(
-                        modifier = Modifier.height(12.dp)
+                        modifier = Modifier.height(14.dp)
                     )
 
                     Text(
@@ -2348,10 +2412,6 @@ fun TelaNovaMovimentacao(
 
                             mensagem = ""
                         }
-                    )
-
-                    Spacer(
-                        modifier = Modifier.height(12.dp)
                     )
 
                     Spacer(
@@ -2402,7 +2462,7 @@ fun TelaNovaMovimentacao(
                 if (tipo == "Saída") {
 
                     Spacer(
-                        modifier = Modifier.height(12.dp)
+                        modifier = Modifier.height(14.dp)
                     )
 
                     Text(
@@ -2464,10 +2524,6 @@ fun TelaNovaMovimentacao(
                     if (formaPagamento == "Conta") {
 
                         Spacer(
-                            modifier = Modifier.height(12.dp)
-                        )
-
-                        Spacer(
                             modifier = Modifier.height(14.dp)
                         )
 
@@ -2511,10 +2567,6 @@ fun TelaNovaMovimentacao(
                     // SAÍDA NO CRÉDITO
 
                     if (formaPagamento == "Crédito") {
-
-                        Spacer(
-                            modifier = Modifier.height(12.dp)
-                        )
 
                         Spacer(
                             modifier = Modifier.height(14.dp)
@@ -2613,19 +2665,10 @@ fun TelaNovaMovimentacao(
                                 mensagem = ""
                             }
                         )
-
-                        Spacer(
-                            modifier = Modifier.height(12.dp)
-                        )
-
                     }
 
 
                     if (formaPagamento.isNotBlank()) {
-
-                        Spacer(
-                            modifier = Modifier.height(12.dp)
-                        )
 
                         Spacer(
                             modifier = Modifier.height(14.dp)
@@ -2676,10 +2719,6 @@ fun TelaNovaMovimentacao(
                 if (tipo == "Transferência") {
 
                     Spacer(
-                        modifier = Modifier.height(12.dp)
-                    )
-
-                    Spacer(
                         modifier = Modifier.height(14.dp)
                     )
 
@@ -2728,10 +2767,6 @@ fun TelaNovaMovimentacao(
 
                             mensagem = ""
                         }
-                    )
-
-                    Spacer(
-                        modifier = Modifier.height(12.dp)
                     )
 
                     Spacer(
@@ -2787,18 +2822,41 @@ fun TelaNovaMovimentacao(
                 if (tipo.isNotBlank()) {
 
                     Spacer(
-                        modifier = Modifier.height(12.dp)
+                        modifier = Modifier.height(14.dp)
                     )
 
-                    Button(
+                    Text(
+                        text = "Data",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Medium,
+                        color =
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    Spacer(
+                        modifier = Modifier.height(6.dp)
+                    )
+
+                    androidx.compose.material3.OutlinedButton(
                         onClick = {
                             mostrarCalendario = true
                         },
-                        modifier = Modifier.fillMaxWidth()
+
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .height(50.dp),
+
+                        shape =
+                            androidx.compose.foundation.shape
+                                .RoundedCornerShape(14.dp)
                     ) {
 
                         Text(
-                            text = "Data: $data"
+                            text = data,
+                            modifier = Modifier.fillMaxWidth(),
+                            textAlign = TextAlign.Center,
+                            fontWeight = FontWeight.Medium
                         )
                     }
                 }
@@ -2809,12 +2867,36 @@ fun TelaNovaMovimentacao(
                 if (mensagem.isNotBlank()) {
 
                     Spacer(
-                        modifier = Modifier.height(12.dp)
+                        modifier = Modifier.height(14.dp)
                     )
 
-                    Text(
-                        text = mensagem
-                    )
+                    Box(
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .background(
+                                    color =
+                                        MaterialTheme.colorScheme
+                                            .errorContainer,
+
+                                    shape =
+                                        androidx.compose.foundation.shape
+                                            .RoundedCornerShape(12.dp)
+                                )
+                                .padding(
+                                    horizontal = 14.dp,
+                                    vertical = 10.dp
+                                )
+                    ) {
+
+                        Text(
+                            text = mensagem,
+                            fontSize = 13.sp,
+                            color =
+                                MaterialTheme.colorScheme
+                                    .onErrorContainer
+                        )
+                    }
                 }
 
 
@@ -3045,7 +3127,31 @@ fun TelaNovaMovimentacao(
                             }
                         },
 
-                        modifier = Modifier.fillMaxWidth()
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .height(52.dp),
+
+                        shape =
+                            androidx.compose.foundation.shape
+                                .RoundedCornerShape(14.dp),
+
+                        colors =
+                            androidx.compose.material3.ButtonDefaults
+                                .buttonColors(
+                                    containerColor =
+                                        MaterialTheme.colorScheme.primary,
+
+                                    contentColor =
+                                        MaterialTheme.colorScheme.onPrimary
+                                ),
+
+                        elevation =
+                            androidx.compose.material3.ButtonDefaults
+                                .buttonElevation(
+                                    defaultElevation = 0.dp,
+                                    pressedElevation = 1.dp
+                                )
                     ) {
 
                         Text(
@@ -3056,30 +3162,16 @@ fun TelaNovaMovimentacao(
                                     "Salvar movimentação"
                                 } else {
                                     "Salvar alterações"
-                                }
+                                },
+
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.SemiBold
                         )
                     }
                 }
 
-
-                // TEMPORÁRIO
-                //
-                // Vamos retirar esse botão quando implementarmos
-                // corretamente o gesto Back do Android.
-
                 Spacer(
-                    modifier = Modifier.height(12.dp)
-                )
-
-                Button(
-                    onClick = onVoltar,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text("Voltar")
-                }
-
-                Spacer(
-                    modifier = Modifier.height(24.dp)
+                    modifier = Modifier.height(32.dp)
                 )
             }
         }
@@ -3305,8 +3397,9 @@ fun TelaContas(
     onDesativar: (ContaEntity) -> Unit,
     onReativar: (ContaEntity) -> Unit,
     onExcluir: (
-            ContaEntity,(Boolean, Int) -> Unit
-            ) -> Unit,
+        ContaEntity,
+        (Boolean, String) -> Unit
+    ) -> Unit,
     onVoltar: () -> Unit
 ) {
     BackHandler {
@@ -3844,18 +3937,22 @@ fun TelaContas(
             confirmButton = {
                 TextButton(
                     onClick = {
-                        onExcluir(conta) { sucesso, quantidade ->
+
+                        onExcluir(conta) { sucesso, mensagem ->
+
                             if (sucesso) {
+
                                 mensagemExclusao =
                                     "Conta excluída com sucesso."
+
                             } else {
+
                                 mensagemExclusao =
-                                    "Não é possível excluir a conta \"${conta.nome}\". " +
-                                            "Existem $quantidade movimentação(ões) vinculada(s) a ela." +
-                                            "Desative a conta para impedir novos lançamentos sem perder o histórico."
+                                    mensagem
                             }
 
-                            contaParaExcluir = null
+                            contaParaExcluir =
+                                null
                         }
                     }
                 ) {
@@ -4072,9 +4169,6 @@ fun TelaCartoes(
     var contaSelecionada by remember {
         mutableStateOf<ContaEntity?>(null)
     }
-    var menuContaAberto by remember {
-        mutableStateOf(false)
-    }
     var mensagem by remember {
         mutableStateOf("")
     }
@@ -4102,9 +4196,7 @@ fun TelaCartoes(
     var novaContaCartao by remember {
         mutableStateOf<ContaEntity?>(null)
     }
-    var menuNovaContaAberto by remember {
-        mutableStateOf(false)
-    }
+
     var mensagemEdicao by remember {
         mutableStateOf("")
     }
@@ -4419,7 +4511,6 @@ fun TelaCartoes(
                 onDismissRequest = {
                     mostrarNovoCartao = false
                     mensagem = ""
-                    menuContaAberto = false
                 },
 
                 title = {
@@ -4447,6 +4538,10 @@ fun TelaCartoes(
 
                             singleLine = true,
 
+                            shape =
+                                androidx.compose.foundation.shape
+                                    .RoundedCornerShape(14.dp),
+
                             modifier =
                                 Modifier.fillMaxWidth()
                         )
@@ -4472,6 +4567,10 @@ fun TelaCartoes(
                             },
 
                             singleLine = true,
+
+                            shape =
+                                androidx.compose.foundation.shape
+                                    .RoundedCornerShape(14.dp),
 
                             modifier =
                                 Modifier.fillMaxWidth()
@@ -4503,6 +4602,10 @@ fun TelaCartoes(
 
                                 singleLine = true,
 
+                                shape =
+                                    androidx.compose.foundation.shape
+                                        .RoundedCornerShape(14.dp),
+
                                 modifier =
                                     Modifier.weight(1f)
                             )
@@ -4529,6 +4632,10 @@ fun TelaCartoes(
 
                                 singleLine = true,
 
+                                shape =
+                                    androidx.compose.foundation.shape
+                                        .RoundedCornerShape(14.dp),
+
                                 modifier =
                                     Modifier.weight(1f)
                             )
@@ -4538,53 +4645,41 @@ fun TelaCartoes(
                             modifier = Modifier.height(12.dp)
                         )
 
-                        Box(
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
+                        Text(
+                            text = "Conta vinculada",
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Medium,
+                            color =
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                        )
 
-                            androidx.compose.material3.OutlinedButton(
-                                onClick = {
-                                    menuContaAberto = true
+                        Spacer(
+                            modifier = Modifier.height(6.dp)
+                        )
+
+                        DropdownBlik(
+                            valorSelecionado =
+                                contaSelecionada?.nome
+                                    ?: "Selecione",
+
+                            opcoes =
+                                contas.map { conta ->
+                                    conta.nome
                                 },
 
-                                modifier =
-                                    Modifier.fillMaxWidth()
-                            ) {
+                            modifier =
+                                Modifier.fillMaxWidth(),
 
-                                Text(
-                                    text =
-                                        "Conta: ${
-                                            contaSelecionada?.nome
-                                                ?: "Selecione"
-                                        }"
-                                )
+                            onSelecionar = { nomeConta ->
+
+                                contaSelecionada =
+                                    contas.firstOrNull { conta ->
+                                        conta.nome == nomeConta
+                                    }
+
+                                mensagem = ""
                             }
-
-                            DropdownMenu(
-                                expanded = menuContaAberto,
-
-                                onDismissRequest = {
-                                    menuContaAberto = false
-                                }
-                            ) {
-
-                                contas.forEach { conta ->
-
-                                    DropdownMenuItem(
-                                        text = {
-                                            Text(conta.nome)
-                                        },
-
-                                        onClick = {
-                                            contaSelecionada = conta
-                                            menuContaAberto = false
-                                            mensagem = ""
-                                        }
-                                    )
-                                }
-                            }
-                        }
-
+                        )
 
                         if (mensagem.isNotBlank()) {
 
@@ -4698,7 +4793,6 @@ fun TelaCartoes(
                         onClick = {
                             mostrarNovoCartao = false
                             mensagem = ""
-                            menuContaAberto = false
                         }
                     ) {
 
@@ -4719,7 +4813,8 @@ fun TelaCartoes(
 
                     Text(
                         text = cartao.nome,
-                        fontWeight = FontWeight.Bold
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 20.sp
                     )
                 },
 
@@ -4727,7 +4822,20 @@ fun TelaCartoes(
 
                     Column {
 
-                        TextButton(
+                        Text(
+                            text = "Escolha o que deseja fazer com este cartão.",
+                            fontSize = 13.sp,
+                            color =
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+
+
+                        Spacer(
+                            modifier = Modifier.height(16.dp)
+                        )
+
+
+                        androidx.compose.material3.FilledTonalButton(
                             onClick = {
 
                                 cartaoSelecionadoAcoes =
@@ -4753,8 +4861,8 @@ fun TelaCartoes(
                                         .toString()
 
                                 novaContaCartao =
-                                    contas.find {
-                                        it.id ==
+                                    contas.find { conta ->
+                                        conta.id ==
                                                 cartao.contaId
                                     }
 
@@ -4762,14 +4870,28 @@ fun TelaCartoes(
                             },
 
                             modifier =
-                                Modifier.fillMaxWidth()
+                                Modifier
+                                    .fillMaxWidth()
+                                    .height(48.dp),
+
+                            shape =
+                                androidx.compose.foundation.shape
+                                    .RoundedCornerShape(14.dp)
                         ) {
 
-                            Text("Editar")
+                            Text(
+                                text = "Editar cartão",
+                                fontWeight = FontWeight.SemiBold
+                            )
                         }
 
 
-                        TextButton(
+                        Spacer(
+                            modifier = Modifier.height(8.dp)
+                        )
+
+
+                        androidx.compose.material3.OutlinedButton(
                             onClick = {
 
                                 cartaoSelecionadoAcoes =
@@ -4780,13 +4902,34 @@ fun TelaCartoes(
                             },
 
                             modifier =
-                                Modifier.fillMaxWidth()
+                                Modifier
+                                    .fillMaxWidth()
+                                    .height(48.dp),
+
+                            shape =
+                                androidx.compose.foundation.shape
+                                    .RoundedCornerShape(14.dp),
+
+                            colors =
+                                androidx.compose.material3.ButtonDefaults
+                                    .outlinedButtonColors(
+                                        contentColor =
+                                            MaterialTheme.colorScheme.error
+                                    ),
+
+                            border =
+                                androidx.compose.foundation.BorderStroke(
+                                    width = 1.dp,
+                                    color =
+                                        MaterialTheme.colorScheme
+                                            .error
+                                            .copy(alpha = 0.35f)
+                                )
                         ) {
 
                             Text(
-                                text = "Excluir",
-                                color =
-                                    MaterialTheme.colorScheme.error
+                                text = "Excluir cartão",
+                                fontWeight = FontWeight.SemiBold
                             )
                         }
                     }
@@ -4850,6 +4993,13 @@ fun TelaCartoes(
                             label = {
                                 Text("Limite")
                             },
+
+                            singleLine = true,
+
+                            shape =
+                                androidx.compose.foundation.shape
+                                    .RoundedCornerShape(14.dp),
+
                             modifier = Modifier.fillMaxWidth()
                         )
 
@@ -4866,6 +5016,11 @@ fun TelaCartoes(
                             label = {
                                 Text("Dia de fechamento")
                             },
+                            singleLine = true,
+
+                            shape =
+                                androidx.compose.foundation.shape
+                                    .RoundedCornerShape(14.dp),
                             modifier = Modifier.fillMaxWidth()
                         )
 
@@ -4882,6 +5037,11 @@ fun TelaCartoes(
                             label = {
                                 Text("Dia de vencimento")
                             },
+                            singleLine = true,
+
+                            shape =
+                                androidx.compose.foundation.shape
+                                    .RoundedCornerShape(14.dp),
                             modifier = Modifier.fillMaxWidth()
                         )
 
@@ -4889,54 +5049,73 @@ fun TelaCartoes(
                             modifier = Modifier.height(12.dp)
                         )
 
-                        Box(
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
+                        Text(
+                            text = "Conta vinculada",
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Medium,
+                            color =
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                        )
 
-                            Button(
-                                onClick = {
-                                    menuNovaContaAberto = true
+                        Spacer(
+                            modifier = Modifier.height(6.dp)
+                        )
+
+                        DropdownBlik(
+                            valorSelecionado =
+                                novaContaCartao?.nome
+                                    ?: "Selecione",
+
+                            opcoes =
+                                contas.map { conta ->
+                                    conta.nome
                                 },
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
 
-                                Text(
-                                    text =
-                                        "Conta: ${novaContaCartao?.nome ?: "Selecione"}"
-                                )
+                            modifier =
+                                Modifier.fillMaxWidth(),
+
+                            onSelecionar = { nomeConta ->
+
+                                novaContaCartao =
+                                    contas.firstOrNull { conta ->
+                                        conta.nome == nomeConta
+                                    }
+
+                                mensagemEdicao = ""
                             }
-
-                            DropdownMenu(
-                                expanded = menuNovaContaAberto,
-                                onDismissRequest = {
-                                    menuNovaContaAberto = false
-                                }
-                            ) {
-
-                                contas.forEach { conta ->
-
-                                    DropdownMenuItem(
-                                        text = {
-                                            Text(conta.nome)
-                                        },
-                                        onClick = {
-                                            novaContaCartao = conta
-                                            menuNovaContaAberto = false
-                                        }
-                                    )
-                                }
-                            }
-                        }
+                        )
 
                         if (mensagemEdicao.isNotBlank()) {
 
                             Spacer(
-                                modifier = Modifier.height(8.dp)
+                                modifier = Modifier.height(10.dp)
                             )
 
-                            Text(
-                                text = mensagemEdicao
-                            )
+                            Box(
+                                modifier =
+                                    Modifier
+                                        .fillMaxWidth()
+                                        .background(
+                                            color =
+                                                MaterialTheme.colorScheme.errorContainer,
+
+                                            shape =
+                                                androidx.compose.foundation.shape
+                                                    .RoundedCornerShape(12.dp)
+                                        )
+                                        .padding(
+                                            horizontal = 14.dp,
+                                            vertical = 10.dp
+                                        )
+                            ) {
+
+                                Text(
+                                    text = mensagemEdicao,
+                                    fontSize = 13.sp,
+                                    color =
+                                        MaterialTheme.colorScheme.onErrorContainer
+                                )
+                            }
                         }
                     }
                 },
@@ -9167,3 +9346,28 @@ fun calcularStatusFatura(
         else -> "Fechada"
     }
 }
+
+@Composable
+fun MarcaBlik(
+    modifier: Modifier = Modifier
+) {
+
+    Image(
+        painter =
+            painterResource(
+                id = R.drawable.logo_blik
+            ),
+
+        contentDescription =
+            "Logo Blik",
+
+        modifier =
+            modifier
+                .width(90.dp)
+                .height(36.dp),
+
+        contentScale =
+            androidx.compose.ui.layout.ContentScale.Fit
+    )
+}
+
