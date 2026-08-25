@@ -332,11 +332,59 @@ fun AppFinanceiro() {
                     }
                 }
             },
-                onExcluir = { cartao ->
+                onExcluir = { cartao, resultado ->
+
                     scope.launch {
-                        cartaoDao.excluir(
-                            cartao.id
-                        )
+
+                        val quantidadeMovimentacoes =
+                            movimentacoesEntity.count { movimentacao ->
+                                movimentacao.cartaoId == cartao.id
+                            }
+
+                        val quantidadeParcelas =
+                            parcelasCartao.count { parcela ->
+                                parcela.cartaoId == cartao.id
+                            }
+
+                        val quantidadePagamentos =
+                            pagamentosFatura.count { pagamento ->
+                                pagamento.cartaoId == cartao.id
+                            }
+
+                        if (
+                            quantidadeMovimentacoes > 0 ||
+                            quantidadeParcelas > 0 ||
+                            quantidadePagamentos > 0
+                        ) {
+
+                            resultado(
+                                false,
+                                "Não é possível excluir o cartão \"${cartao.nome}\" porque existem registros financeiros vinculados a ele."
+                            )
+
+                        } else {
+
+                            try {
+
+                                cartaoDao.excluir(
+                                    cartao.id
+                                )
+
+                                resultado(
+                                    true,
+                                    ""
+                                )
+
+                            } catch (
+                                e: android.database.sqlite.SQLiteConstraintException
+                            ) {
+
+                                resultado(
+                                    false,
+                                    "Não é possível excluir o cartão \"${cartao.nome}\" porque ainda existem registros vinculados a ele."
+                                )
+                            }
+                        }
                     }
                 },
 
@@ -4143,7 +4191,10 @@ fun TelaCartoes(
             (Boolean) -> Unit
             ) -> Unit,
 
-    onExcluir: (CartaoComConta) -> Unit,
+    onExcluir: (
+        CartaoComConta,
+        (Boolean, String) -> Unit
+    ) -> Unit,
 
     onVoltar: () -> Unit
 ) {
@@ -4179,6 +4230,10 @@ fun TelaCartoes(
 
     var cartaoParaExcluir by remember {
         mutableStateOf<CartaoComConta?>(null)
+    }
+
+    var mensagemExclusao by remember {
+        mutableStateOf("")
     }
 
     var novoNomeCartao by remember {
@@ -5218,6 +5273,7 @@ fun TelaCartoes(
             AlertDialog(
                 onDismissRequest = {
                     cartaoParaExcluir = null
+                    mensagemExclusao = ""
                 },
 
                 title = {
@@ -5225,10 +5281,27 @@ fun TelaCartoes(
                 },
 
                 text = {
-                    Text(
-                        text =
-                            "Deseja excluir o cartão \"${cartao.nome}\" definitivamente?"
-                    )
+
+                    Column {
+
+                        Text(
+                            text =
+                                "Deseja excluir o cartão \"${cartao.nome}\" definitivamente?"
+                        )
+
+                        if (mensagemExclusao.isNotBlank()) {
+
+                            Spacer(
+                                modifier = Modifier.height(12.dp)
+                            )
+
+                            Text(
+                                text = mensagemExclusao,
+                                color = MaterialTheme.colorScheme.error,
+                                fontSize = 13.sp
+                            )
+                        }
+                    }
                 },
 
                 confirmButton = {
@@ -5236,9 +5309,19 @@ fun TelaCartoes(
                     TextButton(
                         onClick = {
 
-                            onExcluir(cartao)
+                            onExcluir(cartao) { sucesso, mensagemRetorno ->
 
-                            cartaoParaExcluir = null
+                                if (sucesso) {
+
+                                    cartaoParaExcluir = null
+                                    mensagemExclusao = ""
+
+                                } else {
+
+                                    mensagemExclusao =
+                                        mensagemRetorno
+                                }
+                            }
                         }
                     ) {
                         Text("Excluir")
@@ -5250,6 +5333,7 @@ fun TelaCartoes(
                     TextButton(
                         onClick = {
                             cartaoParaExcluir = null
+                            mensagemExclusao = ""
                         }
                     ) {
                         Text("Cancelar")
@@ -5259,6 +5343,7 @@ fun TelaCartoes(
         }
     }
 }
+
 @Composable
 fun TelaCategorias(
     categorias: List<CategoriaEntity>,
