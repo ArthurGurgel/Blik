@@ -1745,7 +1745,7 @@ fun AppFinanceiro() {
                             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                             """.trimIndent(),
 
-                                                arrayOf(
+                                                arrayOf<Any?>(
                                                     item.getInt("id"),
                                                     item.getString(
                                                         "descricao"
@@ -1807,7 +1807,7 @@ fun AppFinanceiro() {
                             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                             """.trimIndent(),
 
-                                                arrayOf(
+                                                arrayOf<Any?>(
                                                     item.getInt("id"),
                                                     item.getInt(
                                                         "movimentacaoId"
