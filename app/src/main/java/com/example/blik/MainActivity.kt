@@ -11,6 +11,8 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -75,6 +77,8 @@ import java.util.Date
 import java.util.Locale
 import com.example.blik.ui.theme.BlikTheme
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 data class Movimentacao(
    val id: Int = 0,
@@ -168,6 +172,461 @@ fun AppFinanceiro() {
     val todasContas by contaDao
         .listarTodas()
         .collectAsState(initial = emptyList())
+
+    val exportarBackupLauncher =
+        rememberLauncherForActivityResult(
+            contract =
+                ActivityResultContracts.CreateDocument(
+                    "application/json"
+                )
+        ) { uri ->
+
+            if (uri != null) {
+
+                try {
+
+                    val backup =
+                        org.json.JSONObject().apply {
+
+                            put("app", "Blik")
+                            put("versaoBackup", 1)
+                            put(
+                                "dataBackup",
+                                System.currentTimeMillis()
+                            )
+
+                            // =============================================
+                            // CONTAS
+                            // =============================================
+
+                            put(
+                                "contas",
+                                org.json.JSONArray().apply {
+
+                                    todasContas.forEach { conta ->
+
+                                        put(
+                                            org.json.JSONObject().apply {
+
+                                                put("id", conta.id)
+
+                                                put(
+                                                    "nome",
+                                                    conta.nome
+                                                )
+
+                                                put(
+                                                    "saldoInicial",
+                                                    conta.saldoInicial
+                                                )
+
+                                                put(
+                                                    "ativa",
+                                                    conta.ativa
+                                                )
+                                            }
+                                        )
+                                    }
+                                }
+                            )
+
+
+                            // =============================================
+                            // CATEGORIAS
+                            // =============================================
+
+                            put(
+                                "categorias",
+                                org.json.JSONArray().apply {
+
+                                    categorias.forEach { categoria ->
+
+                                        put(
+                                            org.json.JSONObject().apply {
+
+                                                put(
+                                                    "id",
+                                                    categoria.id
+                                                )
+
+                                                put(
+                                                    "nome",
+                                                    categoria.nome
+                                                )
+                                            }
+                                        )
+                                    }
+                                }
+                            )
+
+
+                            // =============================================
+                            // CARTÕES
+                            // =============================================
+
+                            put(
+                                "cartoes",
+                                org.json.JSONArray().apply {
+
+                                    cartoes.forEach { cartao ->
+
+                                        put(
+                                            org.json.JSONObject().apply {
+
+                                                put(
+                                                    "id",
+                                                    cartao.id
+                                                )
+
+                                                put(
+                                                    "nome",
+                                                    cartao.nome
+                                                )
+
+                                                put(
+                                                    "limite",
+                                                    cartao.limite
+                                                )
+
+                                                put(
+                                                    "diaFechamento",
+                                                    cartao.diaFechamento
+                                                )
+
+                                                put(
+                                                    "diaVencimento",
+                                                    cartao.diaVencimento
+                                                )
+
+                                                put(
+                                                    "contaId",
+                                                    cartao.contaId
+                                                )
+                                            }
+                                        )
+                                    }
+                                }
+                            )
+
+
+                            // =============================================
+                            // MOVIMENTAÇÕES
+                            // =============================================
+
+                            put(
+                                "movimentacoes",
+                                org.json.JSONArray().apply {
+
+                                    movimentacoesEntity.forEach { movimentacao ->
+
+                                        put(
+                                            org.json.JSONObject().apply {
+
+                                                put(
+                                                    "id",
+                                                    movimentacao.id
+                                                )
+
+                                                put(
+                                                    "descricao",
+                                                    movimentacao.descricao
+                                                )
+
+                                                put(
+                                                    "valor",
+                                                    movimentacao.valor
+                                                )
+
+                                                put(
+                                                    "tipo",
+                                                    movimentacao.tipo
+                                                )
+
+                                                put(
+                                                    "formaPagamento",
+                                                    movimentacao.formaPagamento
+                                                        ?: org.json.JSONObject.NULL
+                                                )
+
+                                                put(
+                                                    "contaId",
+                                                    movimentacao.contaId
+                                                        ?: org.json.JSONObject.NULL
+                                                )
+
+                                                put(
+                                                    "contaDestinoId",
+                                                    movimentacao.contaDestinoId
+                                                        ?: org.json.JSONObject.NULL
+                                                )
+
+                                                put(
+                                                    "categoriaId",
+                                                    movimentacao.categoriaId
+                                                        ?: org.json.JSONObject.NULL
+                                                )
+
+                                                put(
+                                                    "cartaoId",
+                                                    movimentacao.cartaoId
+                                                        ?: org.json.JSONObject.NULL
+                                                )
+
+                                                put(
+                                                    "quantidadeParcelas",
+                                                    movimentacao.quantidadeParcelas
+                                                )
+
+                                                put(
+                                                    "data",
+                                                    movimentacao.data
+                                                )
+                                            }
+                                        )
+                                    }
+                                }
+                            )
+
+
+                            // =============================================
+                            // PARCELAS
+                            // =============================================
+
+                            put(
+                                "parcelas",
+                                org.json.JSONArray().apply {
+
+                                    parcelasCartao.forEach { parcela ->
+
+                                        put(
+                                            org.json.JSONObject().apply {
+
+                                                put(
+                                                    "id",
+                                                    parcela.id
+                                                )
+
+                                                put(
+                                                    "movimentacaoId",
+                                                    parcela.movimentacaoId
+                                                )
+
+                                                put(
+                                                    "cartaoId",
+                                                    parcela.cartaoId
+                                                )
+
+                                                put(
+                                                    "numeroParcela",
+                                                    parcela.numeroParcela
+                                                )
+
+                                                put(
+                                                    "totalParcelas",
+                                                    parcela.totalParcelas
+                                                )
+
+                                                put(
+                                                    "valor",
+                                                    parcela.valor
+                                                )
+
+                                                put(
+                                                    "mesFatura",
+                                                    parcela.mesFatura
+                                                )
+
+                                                put(
+                                                    "anoFatura",
+                                                    parcela.anoFatura
+                                                )
+
+                                                put(
+                                                    "quitadaAnteriormente",
+                                                    parcela.quitadaAnteriormente
+                                                )
+                                            }
+                                        )
+                                    }
+                                }
+                            )
+
+
+                            // =============================================
+                            // PAGAMENTOS DE FATURA
+                            // =============================================
+
+                            put(
+                                "pagamentosFatura",
+                                org.json.JSONArray().apply {
+
+                                    pagamentosFatura.forEach { pagamento ->
+
+                                        put(
+                                            org.json.JSONObject().apply {
+
+                                                put(
+                                                    "id",
+                                                    pagamento.id
+                                                )
+
+                                                put(
+                                                    "cartaoId",
+                                                    pagamento.cartaoId
+                                                )
+
+                                                put(
+                                                    "contaId",
+                                                    pagamento.contaId
+                                                )
+
+                                                put(
+                                                    "mesFatura",
+                                                    pagamento.mesFatura
+                                                )
+
+                                                put(
+                                                    "anoFatura",
+                                                    pagamento.anoFatura
+                                                )
+
+                                                put(
+                                                    "valorPago",
+                                                    pagamento.valorPago
+                                                )
+
+                                                put(
+                                                    "dataPagamento",
+                                                    pagamento.dataPagamento
+                                                )
+                                            }
+                                        )
+                                    }
+                                }
+                            )
+                        }
+
+
+                    context.contentResolver
+                        .openOutputStream(uri)
+                        ?.bufferedWriter()
+                        ?.use { writer ->
+
+                            writer.write(
+                                backup.toString(2)
+                            )
+                        }
+
+
+                    android.widget.Toast
+                        .makeText(
+                            context,
+                            "Backup exportado com sucesso.",
+                            android.widget.Toast.LENGTH_SHORT
+                        )
+                        .show()
+
+                } catch (e: Exception) {
+
+                    android.widget.Toast
+                        .makeText(
+                            context,
+                            "Não foi possível exportar o backup.",
+                            android.widget.Toast.LENGTH_LONG
+                        )
+                        .show()
+                }
+            }
+        }
+
+    var backupPendente by remember {
+        mutableStateOf<org.json.JSONObject?>(null)
+    }
+
+    var mostrarConfirmacaoRestauracao by remember {
+        mutableStateOf(false)
+    }
+
+    val restaurarBackupLauncher =
+        rememberLauncherForActivityResult(
+            contract =
+                ActivityResultContracts.OpenDocument()
+        ) { uri ->
+
+            if (uri != null) {
+
+                try {
+
+                    val conteudo =
+                        context.contentResolver
+                            .openInputStream(uri)
+                            ?.bufferedReader()
+                            ?.use { reader ->
+                                reader.readText()
+                            }
+                            ?: throw Exception(
+                                "Não foi possível ler o arquivo."
+                            )
+
+                    val backup =
+                        org.json.JSONObject(
+                            conteudo
+                        )
+
+                    val app =
+                        backup.optString(
+                            "app"
+                        )
+
+                    val versaoBackup =
+                        backup.optInt(
+                            "versaoBackup",
+                            -1
+                        )
+
+                    val estruturaValida =
+                        backup.has("contas") &&
+                                backup.has("categorias") &&
+                                backup.has("cartoes") &&
+                                backup.has("movimentacoes") &&
+                                backup.has("parcelas") &&
+                                backup.has("pagamentosFatura")
+
+                    if (
+                        app == "Blik" &&
+                        versaoBackup == 1 &&
+                        estruturaValida
+                    ) {
+
+                        backupPendente =
+                            backup
+
+                        mostrarConfirmacaoRestauracao =
+                            true
+
+                    } else {
+
+                        android.widget.Toast
+                            .makeText(
+                                context,
+                                "Este arquivo não é um backup compatível do Blik.",
+                                android.widget.Toast.LENGTH_LONG
+                            )
+                            .show()
+                    }
+
+                } catch (e: Exception) {
+
+                    android.widget.Toast
+                        .makeText(
+                            context,
+                            "Não foi possível ler o backup.",
+                            android.widget.Toast.LENGTH_LONG
+                        )
+                        .show()
+                }
+            }
+        }
 
     LaunchedEffect(Unit) {
         if (contaDao.quantidade() == 0) {
@@ -263,6 +722,23 @@ fun AppFinanceiro() {
                 },
                 onHistorico = {
                     telaAtual = "historico"
+                },
+
+                onExportarBackup = {
+                    exportarBackupLauncher.launch(
+                        "blik-backup.json"
+                    )
+                },
+
+                onRestaurarBackup = {
+
+                    restaurarBackupLauncher.launch(
+                        arrayOf(
+                            "application/json",
+                            "text/json",
+                            "text/plain"
+                        )
+                    )
                 }
             )
         }
@@ -928,6 +1404,568 @@ fun AppFinanceiro() {
             )
         }
     }
+    if (
+        mostrarConfirmacaoRestauracao &&
+        backupPendente != null
+    ) {
+
+        AlertDialog(
+            onDismissRequest = {
+
+                mostrarConfirmacaoRestauracao =
+                    false
+
+                backupPendente =
+                    null
+            },
+
+            title = {
+
+                Text(
+                    text = "Restaurar backup?"
+                )
+            },
+
+            text = {
+
+                Column {
+
+                    Text(
+                        text =
+                            "Os dados atuais do Blik serão substituídos pelos dados deste backup."
+                    )
+
+                    Spacer(
+                        modifier =
+                            Modifier.height(12.dp)
+                    )
+
+                    Text(
+                        text =
+                            "Esta ação não poderá ser desfeita.",
+                        color =
+                            MaterialTheme.colorScheme.error,
+                        fontWeight =
+                            FontWeight.SemiBold
+                    )
+                }
+            },
+
+            confirmButton = {
+
+                Button(
+                    onClick = {
+
+                        val backup =
+                            backupPendente
+                                ?: return@Button
+
+                        scope.launch {
+
+                            try {
+
+                                withContext(
+                                    Dispatchers.IO
+                                ) {
+
+                                    banco.runInTransaction {
+
+                                        val db =
+                                            banco
+                                                .openHelper
+                                                .writableDatabase
+
+
+                                        // =============================================
+                                        // APAGA OS DADOS ATUAIS
+                                        // FILHOS -> PAIS
+                                        // =============================================
+
+                                        db.execSQL(
+                                            "DELETE FROM pagamentos_fatura"
+                                        )
+
+                                        db.execSQL(
+                                            "DELETE FROM parcelas_cartao"
+                                        )
+
+                                        db.execSQL(
+                                            "DELETE FROM movimentacoes"
+                                        )
+
+                                        db.execSQL(
+                                            "DELETE FROM cartoes"
+                                        )
+
+                                        db.execSQL(
+                                            "DELETE FROM categorias"
+                                        )
+
+                                        db.execSQL(
+                                            "DELETE FROM contas"
+                                        )
+
+
+                                        // =============================================
+                                        // RESTAURA CONTAS
+                                        // =============================================
+
+                                        val contasJson =
+                                            backup.getJSONArray(
+                                                "contas"
+                                            )
+
+                                        for (
+                                        indice in
+                                        0 until contasJson.length()
+                                        ) {
+
+                                            val item =
+                                                contasJson.getJSONObject(
+                                                    indice
+                                                )
+
+                                            db.execSQL(
+                                                """
+                            INSERT INTO contas (
+                                id,
+                                nome,
+                                saldoInicial,
+                                ativa
+                            )
+                            VALUES (?, ?, ?, ?)
+                            """.trimIndent(),
+
+                                                arrayOf(
+                                                    item.getInt("id"),
+                                                    item.getString("nome"),
+                                                    item.getDouble(
+                                                        "saldoInicial"
+                                                    ),
+                                                    if (
+                                                        item.getBoolean(
+                                                            "ativa"
+                                                        )
+                                                    ) {
+                                                        1
+                                                    } else {
+                                                        0
+                                                    }
+                                                )
+                                            )
+                                        }
+
+
+                                        // =============================================
+                                        // RESTAURA CATEGORIAS
+                                        // =============================================
+
+                                        val categoriasJson =
+                                            backup.getJSONArray(
+                                                "categorias"
+                                            )
+
+                                        for (
+                                        indice in
+                                        0 until categoriasJson.length()
+                                        ) {
+
+                                            val item =
+                                                categoriasJson
+                                                    .getJSONObject(
+                                                        indice
+                                                    )
+
+                                            db.execSQL(
+                                                """
+                            INSERT INTO categorias (
+                                id,
+                                nome
+                            )
+                            VALUES (?, ?)
+                            """.trimIndent(),
+
+                                                arrayOf(
+                                                    item.getInt("id"),
+                                                    item.getString("nome")
+                                                )
+                                            )
+                                        }
+
+
+                                        // =============================================
+                                        // RESTAURA CARTÕES
+                                        // =============================================
+
+                                        val cartoesJson =
+                                            backup.getJSONArray(
+                                                "cartoes"
+                                            )
+
+                                        for (
+                                        indice in
+                                        0 until cartoesJson.length()
+                                        ) {
+
+                                            val item =
+                                                cartoesJson.getJSONObject(
+                                                    indice
+                                                )
+
+                                            db.execSQL(
+                                                """
+                            INSERT INTO cartoes (
+                                id,
+                                nome,
+                                limite,
+                                diaFechamento,
+                                diaVencimento,
+                                contaId
+                            )
+                            VALUES (?, ?, ?, ?, ?, ?)
+                            """.trimIndent(),
+
+                                                arrayOf(
+                                                    item.getInt("id"),
+                                                    item.getString("nome"),
+                                                    item.getDouble("limite"),
+                                                    item.getInt(
+                                                        "diaFechamento"
+                                                    ),
+                                                    item.getInt(
+                                                        "diaVencimento"
+                                                    ),
+                                                    item.getInt("contaId")
+                                                )
+                                            )
+                                        }
+
+
+                                        // =============================================
+                                        // RESTAURA MOVIMENTAÇÕES
+                                        // =============================================
+
+                                        val movimentacoesJson =
+                                            backup.getJSONArray(
+                                                "movimentacoes"
+                                            )
+
+                                        for (
+                                        indice in
+                                        0 until movimentacoesJson.length()
+                                        ) {
+
+                                            val item =
+                                                movimentacoesJson
+                                                    .getJSONObject(
+                                                        indice
+                                                    )
+
+                                            val formaPagamento =
+                                                if (
+                                                    item.isNull(
+                                                        "formaPagamento"
+                                                    )
+                                                ) {
+                                                    null
+                                                } else {
+                                                    item.getString(
+                                                        "formaPagamento"
+                                                    )
+                                                }
+
+                                            val contaId =
+                                                if (
+                                                    item.isNull(
+                                                        "contaId"
+                                                    )
+                                                ) {
+                                                    null
+                                                } else {
+                                                    item.getInt(
+                                                        "contaId"
+                                                    )
+                                                }
+
+                                            val contaDestinoId =
+                                                if (
+                                                    item.isNull(
+                                                        "contaDestinoId"
+                                                    )
+                                                ) {
+                                                    null
+                                                } else {
+                                                    item.getInt(
+                                                        "contaDestinoId"
+                                                    )
+                                                }
+
+                                            val categoriaId =
+                                                if (
+                                                    item.isNull(
+                                                        "categoriaId"
+                                                    )
+                                                ) {
+                                                    null
+                                                } else {
+                                                    item.getInt(
+                                                        "categoriaId"
+                                                    )
+                                                }
+
+                                            val cartaoId =
+                                                if (
+                                                    item.isNull(
+                                                        "cartaoId"
+                                                    )
+                                                ) {
+                                                    null
+                                                } else {
+                                                    item.getInt(
+                                                        "cartaoId"
+                                                    )
+                                                }
+
+
+                                            db.execSQL(
+                                                """
+                            INSERT INTO movimentacoes (
+                                id,
+                                descricao,
+                                valor,
+                                tipo,
+                                formaPagamento,
+                                contaId,
+                                contaDestinoId,
+                                categoriaId,
+                                cartaoId,
+                                quantidadeParcelas,
+                                data
+                            )
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                            """.trimIndent(),
+
+                                                arrayOf(
+                                                    item.getInt("id"),
+                                                    item.getString(
+                                                        "descricao"
+                                                    ),
+                                                    item.getDouble(
+                                                        "valor"
+                                                    ),
+                                                    item.getString(
+                                                        "tipo"
+                                                    ),
+                                                    formaPagamento,
+                                                    contaId,
+                                                    contaDestinoId,
+                                                    categoriaId,
+                                                    cartaoId,
+                                                    item.getInt(
+                                                        "quantidadeParcelas"
+                                                    ),
+                                                    item.getString(
+                                                        "data"
+                                                    )
+                                                )
+                                            )
+                                        }
+
+
+                                        // =============================================
+                                        // RESTAURA PARCELAS
+                                        // =============================================
+
+                                        val parcelasJson =
+                                            backup.getJSONArray(
+                                                "parcelas"
+                                            )
+
+                                        for (
+                                        indice in
+                                        0 until parcelasJson.length()
+                                        ) {
+
+                                            val item =
+                                                parcelasJson.getJSONObject(
+                                                    indice
+                                                )
+
+                                            db.execSQL(
+                                                """
+                            INSERT INTO parcelas_cartao (
+                                id,
+                                movimentacaoId,
+                                cartaoId,
+                                numeroParcela,
+                                totalParcelas,
+                                valor,
+                                mesFatura,
+                                anoFatura,
+                                quitadaAnteriormente
+                            )
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                            """.trimIndent(),
+
+                                                arrayOf(
+                                                    item.getInt("id"),
+                                                    item.getInt(
+                                                        "movimentacaoId"
+                                                    ),
+                                                    item.getInt(
+                                                        "cartaoId"
+                                                    ),
+                                                    item.getInt(
+                                                        "numeroParcela"
+                                                    ),
+                                                    item.getInt(
+                                                        "totalParcelas"
+                                                    ),
+                                                    item.getDouble(
+                                                        "valor"
+                                                    ),
+                                                    item.getInt(
+                                                        "mesFatura"
+                                                    ),
+                                                    item.getInt(
+                                                        "anoFatura"
+                                                    ),
+                                                    if (
+                                                        item.getBoolean(
+                                                            "quitadaAnteriormente"
+                                                        )
+                                                    ) {
+                                                        1
+                                                    } else {
+                                                        0
+                                                    }
+                                                )
+                                            )
+                                        }
+
+
+                                        // =============================================
+                                        // RESTAURA PAGAMENTOS DE FATURA
+                                        // =============================================
+
+                                        val pagamentosJson =
+                                            backup.getJSONArray(
+                                                "pagamentosFatura"
+                                            )
+
+                                        for (
+                                        indice in
+                                        0 until pagamentosJson.length()
+                                        ) {
+
+                                            val item =
+                                                pagamentosJson
+                                                    .getJSONObject(
+                                                        indice
+                                                    )
+
+                                            db.execSQL(
+                                                """
+                            INSERT INTO pagamentos_fatura (
+                                id,
+                                cartaoId,
+                                contaId,
+                                mesFatura,
+                                anoFatura,
+                                valorPago,
+                                dataPagamento
+                            )
+                            VALUES (?, ?, ?, ?, ?, ?, ?)
+                            """.trimIndent(),
+
+                                                arrayOf(
+                                                    item.getInt("id"),
+                                                    item.getInt(
+                                                        "cartaoId"
+                                                    ),
+                                                    item.getInt(
+                                                        "contaId"
+                                                    ),
+                                                    item.getInt(
+                                                        "mesFatura"
+                                                    ),
+                                                    item.getInt(
+                                                        "anoFatura"
+                                                    ),
+                                                    item.getDouble(
+                                                        "valorPago"
+                                                    ),
+                                                    item.getString(
+                                                        "dataPagamento"
+                                                    )
+                                                )
+                                            )
+                                        }
+                                    }
+                                }
+
+
+                                // =============================================
+                                // SUCESSO
+                                // =============================================
+
+                                mostrarConfirmacaoRestauracao =
+                                    false
+
+                                backupPendente =
+                                    null
+
+                                telaAtual =
+                                    "inicio"
+
+                                android.widget.Toast
+                                    .makeText(
+                                        context,
+                                        "Backup restaurado com sucesso.",
+                                        android.widget.Toast.LENGTH_LONG
+                                    )
+                                    .show()
+
+                            } catch (e: Exception) {
+
+                                android.widget.Toast
+                                    .makeText(
+                                        context,
+                                        "Não foi possível restaurar o backup. Os dados atuais foram preservados.",
+                                        android.widget.Toast.LENGTH_LONG
+                                    )
+                                    .show()
+                            }
+                        }
+                    }
+                ) {
+
+                    Text(
+                        text = "Restaurar"
+                    )
+                }
+            },
+
+            dismissButton = {
+
+                TextButton(
+                    onClick = {
+
+                        mostrarConfirmacaoRestauracao =
+                            false
+
+                        backupPendente =
+                            null
+                    }
+                ) {
+
+                    Text(
+                        text = "Cancelar"
+                    )
+                }
+            }
+        )
+    }
 }
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -943,7 +1981,9 @@ fun TelaInicial(
     onCategorias: () -> Unit,
     onHistorico: () -> Unit,
     onCartoes: () -> Unit,
-    onFaturas: () -> Unit
+    onFaturas: () -> Unit,
+    onExportarBackup: () -> Unit,
+    onRestaurarBackup: () -> Unit
 ) {
     val calendario = java.util.Calendar.getInstance()
 
@@ -1376,6 +2416,66 @@ fun TelaInicial(
                         }
 
                         onCategorias()
+                    },
+
+                    modifier =
+                        Modifier.padding(
+                            horizontal = 12.dp,
+                            vertical = 2.dp
+                        ),
+
+                    shape =
+                        androidx.compose.foundation.shape.RoundedCornerShape(
+                            14.dp
+                        ),
+
+                    colors = coresItemDrawer
+                )
+
+                NavigationDrawerItem(
+                    label = {
+                        Text("Exportar backup")
+                    },
+
+                    selected = false,
+
+                    onClick = {
+
+                        scope.launch {
+                            drawerState.close()
+                        }
+
+                        onExportarBackup()
+                    },
+
+                    modifier =
+                        Modifier.padding(
+                            horizontal = 12.dp,
+                            vertical = 2.dp
+                        ),
+
+                    shape =
+                        androidx.compose.foundation.shape.RoundedCornerShape(
+                            14.dp
+                        ),
+
+                    colors = coresItemDrawer
+                )
+
+                NavigationDrawerItem(
+                    label = {
+                        Text("Restaurar backup")
+                    },
+
+                    selected = false,
+
+                    onClick = {
+
+                        scope.launch {
+                            drawerState.close()
+                        }
+
+                        onRestaurarBackup()
                     },
 
                     modifier =
