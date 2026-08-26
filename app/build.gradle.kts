@@ -6,9 +6,8 @@ plugins {
 
 android {
     namespace = "com.example.blik"
-    compileSdk {
-        version = release(37)
-    }
+    compileSdk = 37
+
 
     defaultConfig {
         applicationId = "com.example.blik"
