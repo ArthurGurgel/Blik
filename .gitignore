@@ -13,3 +13,6 @@
 .externalNativeBuild
 .cxx
 local.properties
+# APKs e artefatos de release
+*.apk
+app/release/
