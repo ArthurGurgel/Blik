@@ -194,6 +194,7 @@ fun BlikApp() {
                             )
                     }
 
+
                 if (usuarioValido) {
 
                     AppFinanceiro()
