@@ -867,6 +867,25 @@ fun AppFinanceiro() {
                             "text/plain"
                         )
                     )
+                },
+
+                onSair = {
+
+                    scope.launch {
+
+                        try {
+
+                            AuthRepository.sair()
+
+                        } catch (e: Exception) {
+
+                            Toast.makeText(
+                                context,
+                                "Não foi possível sair da conta.",
+                                Toast.LENGTH_LONG
+                            ).show()
+                        }
+                    }
                 }
             )
         }
@@ -2111,7 +2130,8 @@ fun TelaInicial(
     onCartoes: () -> Unit,
     onFaturas: () -> Unit,
     onExportarBackup: () -> Unit,
-    onRestaurarBackup: () -> Unit
+    onRestaurarBackup: () -> Unit,
+    onSair: () -> Unit
 ) {
     val calendario = java.util.Calendar.getInstance()
 
@@ -2618,6 +2638,26 @@ fun TelaInicial(
                         ),
 
                     colors = coresItemDrawer
+                )
+
+                NavigationDrawerItem(
+                    label = {
+                        Text(
+                            text = "Sair da conta",
+                            color = MaterialTheme.colorScheme.error
+                        )
+                    },
+
+                    selected = false,
+
+                    onClick = {
+
+                        scope.launch {
+                            drawerState.close()
+                        }
+
+                        onSair()
+                    }
                 )
             }
         }
