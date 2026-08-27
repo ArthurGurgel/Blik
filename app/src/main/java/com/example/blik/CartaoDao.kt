@@ -89,4 +89,32 @@ interface CartaoDao {
     suspend fun excluir(
         id: Int
     )
+
+    @Query(
+        """
+    SELECT * FROM cartoes
+    WHERE syncId IS NULL
+    """
+    )
+    suspend fun listarSemSyncId(): List<CartaoEntity>
+
+    @Query(
+        """
+    UPDATE cartoes
+    SET syncId = :syncId
+    WHERE id = :id
+      AND syncId IS NULL
+    """
+    )
+    suspend fun definirSyncId(
+        id: Int,
+        syncId: String
+    ): Int
+
+    @Query(
+        """
+    SELECT * FROM cartoes
+    """
+    )
+    suspend fun listarTodosUmaVez(): List<CartaoEntity>
 }

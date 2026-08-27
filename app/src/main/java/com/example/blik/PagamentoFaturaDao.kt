@@ -56,6 +56,36 @@ interface PagamentoFaturaDao {
                 pagamentos_fatura.id Desc
         """
     )
+
+
     fun listarComConta():
             Flow<List<PagamentoFaturaComConta>>
+
+    @Query(
+        """
+    SELECT * FROM pagamentos_fatura
+    WHERE syncId IS NULL
+    """
+    )
+    suspend fun listarSemSyncId(): List<PagamentoFaturaEntity>
+
+    @Query(
+        """
+    UPDATE pagamentos_fatura
+    SET syncId = :syncId
+    WHERE id = :id
+      AND syncId IS NULL
+    """
+    )
+    suspend fun definirSyncId(
+        id: Int,
+        syncId: String
+    ): Int
+
+    @Query(
+        """
+    SELECT * FROM pagamentos_fatura
+    """
+    )
+    suspend fun listarTodosUmaVez(): List<PagamentoFaturaEntity>
 }

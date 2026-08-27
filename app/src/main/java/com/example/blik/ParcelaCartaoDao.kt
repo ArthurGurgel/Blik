@@ -77,7 +77,35 @@ interface ParcelaCartaoDao {
             parcelas_cartao.id ASC
         """
     )
+
     fun listarComDetalhes(): Flow<List<ParcelaCartaoComDetalhes>>
+    @Query(
+        """
+    SELECT * FROM parcelas_cartao
+    WHERE syncId IS NULL
+    """
+    )
+    suspend fun listarSemSyncId(): List<ParcelaCartaoEntity>
+
+    @Query(
+        """
+    UPDATE parcelas_cartao
+    SET syncId = :syncId
+    WHERE id = :id
+      AND syncId IS NULL
+    """
+    )
+    suspend fun definirSyncId(
+        id: Int,
+        syncId: String
+    ): Int
+
+    @Query(
+        """
+    SELECT * FROM parcelas_cartao
+    """
+    )
+    suspend fun listarTodasUmaVez(): List<ParcelaCartaoEntity>
 }
 
 

@@ -42,7 +42,11 @@ import androidx.room.PrimaryKey
         Index(value = ["contaId"]),
         Index(value = ["contaDestinoId"]),
         Index(value = ["categoriaId"]),
-        Index(value = ["cartaoId"])
+        Index(value = ["cartaoId"]),
+        Index(
+            value = ["syncId"],
+            unique = true
+        )
     ]
 )
 data class MovimentacaoEntity(
@@ -68,5 +72,7 @@ data class MovimentacaoEntity(
 
     val quantidadeParcelas: Int = 1,
 
-    val data: String
+    val data: String,
+    val syncId: String? =
+        java.util.UUID.randomUUID().toString()
 )

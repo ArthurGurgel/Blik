@@ -10,6 +10,10 @@ import androidx.room.PrimaryKey
         Index(
             value = ["nome"],
             unique = true
+        ),
+        Index(
+            value = ["syncId"],
+            unique = true
         )
     ]
 )
@@ -20,5 +24,7 @@ data class ContaEntity(
     val id: Int = 0,
     val nome: String,
     val saldoInicial: Double = 0.0,
-    val ativa: Boolean = true
+    val ativa: Boolean = true,
+    val syncId: String? =
+        java.util.UUID.randomUUID().toString()
 )

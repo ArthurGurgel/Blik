@@ -4,32 +4,24 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
 @Serializable
-data class ContaRemotaNova(
+data class CategoriaRemotaNova(
 
     val id: String,
 
     @SerialName("user_id")
     val userId: String,
 
-    val nome: String,
-
-    @SerialName("saldo_inicial")
-    val saldoInicial: Double,
-
-    val ativa: Boolean
+    val nome: String
 )
 
+
 @Serializable
-data class ContaRemota(
+data class CategoriaRemota(
+
     val id: String,
 
     @SerialName("user_id")
     val userId: String,
 
-    val nome: String,
-
-    @SerialName("saldo_inicial")
-    val saldoInicial: Double,
-
-    val ativa: Boolean
+    val nome: String
 )

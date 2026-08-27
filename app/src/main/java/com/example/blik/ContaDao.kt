@@ -123,6 +123,35 @@ interface ContaDao {
         idAtual: Int
     ): Int
 
+    @Query(
+        """
+    SELECT * FROM contas
+    WHERE syncId IS NULL
+    """
+    )
+    suspend fun listarSemSyncId(): List<ContaEntity>
+
+
+    @Query(
+        """
+    UPDATE contas
+    SET syncId = :syncId
+    WHERE id = :id
+      AND syncId IS NULL
+    """
+    )
+    suspend fun definirSyncId(
+        id: Int,
+        syncId: String
+    ): Int
+
+    @Query(
+        """
+    SELECT * FROM contas
+    """
+    )
+    suspend fun listarTodasUmaVez(): List<ContaEntity>
+
 
 }
 

@@ -122,4 +122,32 @@ interface MovimentacaoDao {
         quantidadeParcelas: Int,
         data: String
     )
+
+    @Query(
+        """
+    SELECT * FROM movimentacoes
+    WHERE syncId IS NULL
+    """
+    )
+    suspend fun listarSemSyncId(): List<MovimentacaoEntity>
+
+    @Query(
+        """
+    UPDATE movimentacoes
+    SET syncId = :syncId
+    WHERE id = :id
+      AND syncId IS NULL
+    """
+    )
+    suspend fun definirSyncId(
+        id: Int,
+        syncId: String
+    ): Int
+
+    @Query(
+        """
+    SELECT * FROM movimentacoes
+    """
+    )
+    suspend fun listarTodasUmaVez(): List<MovimentacaoEntity>
 }

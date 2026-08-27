@@ -10,6 +10,10 @@ import androidx.room.PrimaryKey
         Index(
             value = ["nome"],
             unique = true
+        ),
+        Index(
+            value = ["syncId"],
+            unique = true
         )
     ]
 )
@@ -19,5 +23,7 @@ data class CategoriaEntity(
     val id: Int = 0,
 
     val nome: String,
+    val syncId: String? =
+        java.util.UUID.randomUUID().toString()
 
 )

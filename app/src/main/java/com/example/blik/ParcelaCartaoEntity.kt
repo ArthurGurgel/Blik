@@ -34,6 +34,10 @@ import androidx.room.PrimaryKey
                 "numeroParcela"
             ],
             unique = true
+        ),
+        Index(
+            value = ["syncId"],
+            unique = true
         )
     ]
 )
@@ -56,5 +60,7 @@ data class ParcelaCartaoEntity(
 
     val anoFatura: Int,
 
-    val quitadaAnteriormente: Boolean = false
+    val quitadaAnteriormente: Boolean = false,
+    val syncId: String? =
+        java.util.UUID.randomUUID().toString()
 )

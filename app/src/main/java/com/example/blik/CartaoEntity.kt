@@ -20,7 +20,13 @@ import androidx.room.ForeignKey
             value = ["nome"],
             unique = true
         ),
-    Index(value = ["contaId"])
+        Index(
+            value = ["contaId"]
+        ),
+        Index(
+            value = ["syncId"],
+            unique = true
+        )
     ]
 )
 
@@ -31,5 +37,7 @@ data class CartaoEntity(
     val limite: Double,
     val diaFechamento: Int,
     val diaVencimento: Int,
-    val contaId: Int
+    val contaId: Int,
+    val syncId: String? =
+        java.util.UUID.randomUUID().toString()
 )

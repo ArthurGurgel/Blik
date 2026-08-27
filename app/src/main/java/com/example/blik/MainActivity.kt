@@ -311,6 +311,9 @@ fun AppFinanceiro() {
             AppDatabase::class.java,
             "blik.db"
         )
+            .addMigrations(
+                MIGRATION_13_14
+            )
             .build()
     }
 
@@ -810,10 +813,14 @@ fun AppFinanceiro() {
         }
 
     LaunchedEffect(Unit) {
+
         if (contaDao.quantidade() == 0) {
+
             contaDao.inserirTodas(
                 listOf(
-                    ContaEntity(nome = "Banco do Brasil")
+                    ContaEntity(
+                        nome = "Banco do Brasil"
+                    )
                 )
             )
         }
@@ -832,9 +839,312 @@ fun AppFinanceiro() {
                 )
             )
         }
+
+        val contasAtualizadas =
+            SyncIdRepository.preencherContas(
+                contaDao
+            )
+
+        if (contasAtualizadas > 0) {
+
+            Toast.makeText(
+                context,
+                "$contasAtualizadas conta(s) preparada(s) para sincronização.",
+                Toast.LENGTH_LONG
+            ).show()
+        }
+
+        val categoriasAtualizadas =
+            SyncIdRepository.preencherCategorias(
+                categoriaDao
+            )
+
+        val cartoesAtualizados =
+            SyncIdRepository.preencherCartoes(
+                cartaoDao
+            )
+
+        val movimentacoesAtualizadas =
+            SyncIdRepository.preencherMovimentacoes(
+                dao
+            )
+
+        val parcelasAtualizadas =
+            SyncIdRepository.preencherParcelas(
+                parcelaCartaoDao
+            )
+
+        val pagamentosAtualizados =
+            SyncIdRepository.preencherPagamentos(
+                pagamentoFaturaDao
+            )
+
+        val totalAtualizado =
+            categoriasAtualizadas +
+                    cartoesAtualizados +
+                    movimentacoesAtualizadas +
+                    parcelasAtualizadas +
+                    pagamentosAtualizados
+
+        if (totalAtualizado > 0) {
+            Toast.makeText(
+                context,
+                """
+        Preparados para sincronização:
+        Categorias: $categoriasAtualizadas
+        Cartões: $cartoesAtualizados
+        Movimentações: $movimentacoesAtualizadas
+        Parcelas: $parcelasAtualizadas
+        Pagamentos: $pagamentosAtualizados
+        """.trimIndent(),
+                Toast.LENGTH_LONG
+            ).show()
+        }
+
+        val usuarioId =
+            AuthRepository.usuarioAtualId()
+
+        if (usuarioId != null) {
+
+            try {
+
+                val contasParaMigrar =
+                    contaDao.listarTodasUmaVez()
+
+                val quantidadeMigrada =
+                    MigracaoSupabaseRepository.migrarContas(
+                        contas = contasParaMigrar,
+                        usuarioId = usuarioId
+                    )
+
+                if (quantidadeMigrada > 0) {
+
+                    Toast.makeText(
+                        context,
+                        "$quantidadeMigrada conta(s) enviada(s) para a nuvem.",
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
+
+            } catch (e: Exception) {
+
+                Toast.makeText(
+                    context,
+                    "Erro ao migrar contas: ${e.message}",
+                    Toast.LENGTH_LONG
+                ).show()
+            }
+            try {
+
+                val categoriasParaMigrar =
+                    categoriaDao.listarTodasUmaVez()
+
+                val quantidadeMigrada =
+                    MigracaoSupabaseRepository.migrarCategorias(
+                        categorias = categoriasParaMigrar,
+                        usuarioId = usuarioId
+                    )
+
+                if (quantidadeMigrada > 0) {
+
+                    Toast.makeText(
+                        context,
+                        "$quantidadeMigrada categoria(s) enviada(s) para a nuvem.",
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
+
+            } catch (e: Exception) {
+
+                Toast.makeText(
+                    context,
+                    "Erro ao migrar categorias: ${e.message}",
+                    Toast.LENGTH_LONG
+                ).show()
+            }
+            try {
+
+                val cartoesParaMigrar =
+                    cartaoDao.listarTodosUmaVez()
+
+                val contasParaRelacionamento =
+                    contaDao.listarTodasUmaVez()
+
+                val quantidadeMigrada =
+                    MigracaoSupabaseRepository.migrarCartoes(
+                        cartoes = cartoesParaMigrar,
+                        contas = contasParaRelacionamento,
+                        usuarioId = usuarioId
+                    )
+
+                if (quantidadeMigrada > 0) {
+
+                    Toast.makeText(
+                        context,
+                        "$quantidadeMigrada cartão(ões) enviado(s) para a nuvem.",
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
+
+            } catch (e: Exception) {
+
+                Toast.makeText(
+                    context,
+                    "Erro ao migrar cartões: ${e.message}",
+                    Toast.LENGTH_LONG
+                ).show()
+            }
+
+            try {
+
+                val movimentacoesParaMigrar =
+                    dao.listarTodasUmaVez()
+
+                val contasParaRelacionamento =
+                    contaDao.listarTodasUmaVez()
+
+                val categoriasParaRelacionamento =
+                    categoriaDao.listarTodasUmaVez()
+
+                val cartoesParaRelacionamento =
+                    cartaoDao.listarTodosUmaVez()
+
+
+                val quantidadeMigrada =
+                    MigracaoSupabaseRepository
+                        .migrarMovimentacoes(
+                            movimentacoes =
+                                movimentacoesParaMigrar,
+
+                            contas =
+                                contasParaRelacionamento,
+
+                            categorias =
+                                categoriasParaRelacionamento,
+
+                            cartoes =
+                                cartoesParaRelacionamento,
+
+                            usuarioId =
+                                usuarioId
+                        )
+
+
+                if (quantidadeMigrada > 0) {
+
+                    Toast.makeText(
+                        context,
+                        "$quantidadeMigrada movimentação(ões) enviada(s) para a nuvem.",
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
+
+            } catch (e: Exception) {
+
+                Toast.makeText(
+                    context,
+                    "Erro ao migrar movimentações: ${e.message}",
+                    Toast.LENGTH_LONG
+                ).show()
+            }
+
+            try {
+
+                val parcelasParaMigrar =
+                    parcelaCartaoDao.listarTodasUmaVez()
+
+                val movimentacoesParaRelacionamento =
+                    dao.listarTodasUmaVez()
+
+                val cartoesParaRelacionamento =
+                    cartaoDao.listarTodosUmaVez()
+
+
+                val quantidadeMigrada =
+                    MigracaoSupabaseRepository
+                        .migrarParcelas(
+                            parcelas =
+                                parcelasParaMigrar,
+
+                            movimentacoes =
+                                movimentacoesParaRelacionamento,
+
+                            cartoes =
+                                cartoesParaRelacionamento,
+
+                            usuarioId =
+                                usuarioId
+                        )
+
+
+                if (quantidadeMigrada > 0) {
+
+                    Toast.makeText(
+                        context,
+                        "$quantidadeMigrada parcela(s) enviada(s) para a nuvem.",
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
+
+            } catch (e: Exception) {
+
+                Toast.makeText(
+                    context,
+                    "Erro ao migrar parcelas: ${e.message}",
+                    Toast.LENGTH_LONG
+                ).show()
+            }
+
+            try {
+
+                val pagamentosParaMigrar =
+                    pagamentoFaturaDao.listarTodosUmaVez()
+
+                val contasParaRelacionamento =
+                    contaDao.listarTodasUmaVez()
+
+                val cartoesParaRelacionamento =
+                    cartaoDao.listarTodosUmaVez()
+
+
+                val quantidadeMigrada =
+                    MigracaoSupabaseRepository
+                        .migrarPagamentos(
+                            pagamentos =
+                                pagamentosParaMigrar,
+
+                            contas =
+                                contasParaRelacionamento,
+
+                            cartoes =
+                                cartoesParaRelacionamento,
+
+                            usuarioId =
+                                usuarioId
+                        )
+
+
+                if (quantidadeMigrada > 0) {
+
+                    Toast.makeText(
+                        context,
+                        "$quantidadeMigrada pagamento(s) enviado(s) para a nuvem.",
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
+
+            } catch (e: Exception) {
+
+                Toast.makeText(
+                    context,
+                    "Erro ao migrar pagamentos: ${e.message}",
+                    Toast.LENGTH_LONG
+                ).show()
+            }
+        }
+
+
     }
-
-
 
     val scope = rememberCoroutineScope()
 
@@ -1434,12 +1744,38 @@ fun AppFinanceiro() {
                         if (existe) {
                             resultado(false)
                         } else {
-                            contaDao.inserir(
+
+                            val novaConta =
                                 ContaEntity(
                                     nome = nomeLimpo,
                                     saldoInicial = saldoInicial
                                 )
+
+                            contaDao.inserir(
+                                novaConta
                             )
+
+                            val usuarioId =
+                                AuthRepository.usuarioAtualId()
+
+                            if (usuarioId != null) {
+
+                                try {
+
+                                    ContaSyncRepository.sincronizar(
+                                        conta = novaConta,
+                                        usuarioId = usuarioId
+                                    )
+
+                                } catch (e: Exception) {
+
+                                    Toast.makeText(
+                                        context,
+                                        "Conta salva no aparelho, mas ainda não foi sincronizada.",
+                                        Toast.LENGTH_LONG
+                                    ).show()
+                                }
+                            }
 
                             resultado(true)
                         }
@@ -1463,20 +1799,104 @@ fun AppFinanceiro() {
                                 novoSaldoInicial = novoSaldoInicial
                             )
 
+                            val contaAtualizada =
+                                conta.copy(
+                                    nome = nomeLimpo,
+                                    saldoInicial = novoSaldoInicial
+                                )
+
+                            val usuarioId =
+                                AuthRepository.usuarioAtualId()
+
+                            if (usuarioId != null) {
+
+                                try {
+
+                                    ContaSyncRepository.sincronizar(
+                                        conta = contaAtualizada,
+                                        usuarioId = usuarioId
+                                    )
+
+                                } catch (e: Exception) {
+
+                                    Toast.makeText(
+                                        context,
+                                        "Alteração salva no aparelho, mas ainda não foi sincronizada.",
+                                        Toast.LENGTH_LONG
+                                    ).show()
+                                }
+                            }
+
                             resultado(true)
                         }
                     }
                 },
 
-                onDesativar = { conta->
+                onDesativar = { conta ->
+
                     scope.launch {
-                        contaDao.desativar(conta.id)
+
+                        contaDao.desativar(
+                            conta.id
+                        )
+
+                        val usuarioId =
+                            AuthRepository.usuarioAtualId()
+
+                        if (usuarioId != null) {
+
+                            try {
+
+                                ContaSyncRepository.sincronizar(
+                                    conta = conta.copy(
+                                        ativa = false
+                                    ),
+                                    usuarioId = usuarioId
+                                )
+
+                            } catch (e: Exception) {
+
+                                Toast.makeText(
+                                    context,
+                                    "Conta desativada localmente, mas ainda não foi sincronizada.",
+                                    Toast.LENGTH_LONG
+                                ).show()
+                            }
+                        }
                     }
                 },
 
                 onReativar = { conta ->
+
                     scope.launch {
-                        contaDao.reativar(conta.id)
+
+                        contaDao.reativar(
+                            conta.id
+                        )
+
+                        val usuarioId =
+                            AuthRepository.usuarioAtualId()
+
+                        if (usuarioId != null) {
+
+                            try {
+
+                                ContaSyncRepository.sincronizar(
+                                    conta = conta.copy(
+                                        ativa = true
+                                    ),
+                                    usuarioId = usuarioId
+                                )
+
+                            } catch (e: Exception) {
+
+                                Toast.makeText(
+                                    context,
+                                    "Conta reativada localmente, mas ainda não foi sincronizada.",
+                                    Toast.LENGTH_LONG
+                                ).show()
+                            }
+                        }
                     }
                 },
 

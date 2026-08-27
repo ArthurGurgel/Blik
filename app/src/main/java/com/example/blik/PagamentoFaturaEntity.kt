@@ -33,6 +33,10 @@ import androidx.room.PrimaryKey
                 "mesFatura",
                 "anoFatura"
             ]
+        ),
+        Index(
+            value = ["syncId"],
+            unique = true
         )
     ]
 )
@@ -51,5 +55,7 @@ data class PagamentoFaturaEntity(
 
     val valorPago: Double,
 
-    val dataPagamento: String
+    val dataPagamento: String,
+    val syncId: String? =
+        java.util.UUID.randomUUID().toString()
 )

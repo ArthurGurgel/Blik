@@ -83,4 +83,32 @@ interface CategoriaDao {
         nome: String,
         idAtual: Int
     ): Int
+
+    @Query(
+        """
+    SELECT * FROM categorias
+    WHERE syncId IS NULL
+    """
+    )
+    suspend fun listarSemSyncId(): List<CategoriaEntity>
+
+    @Query(
+        """
+    UPDATE categorias
+    SET syncId = :syncId
+    WHERE id = :id
+      AND syncId IS NULL
+    """
+    )
+    suspend fun definirSyncId(
+        id: Int,
+        syncId: String
+    ): Int
+
+    @Query(
+        """
+    SELECT * FROM categorias
+    """
+    )
+    suspend fun listarTodasUmaVez(): List<CategoriaEntity>
 }
