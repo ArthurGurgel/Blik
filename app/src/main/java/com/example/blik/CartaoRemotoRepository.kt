@@ -24,4 +24,12 @@ object CartaoRemotoRepository {
             .select()
             .decodeList<CartaoRemoto>()
     }
+
+    suspend fun sincronizar(
+        cartao: CartaoRemotoNovo
+    ) {
+        SupabaseProvider.client
+            .from("cartoes")
+            .upsert(cartao)
+    }
 }

@@ -23,4 +23,15 @@ object ContaSyncRepository {
             )
         )
     }
+    suspend fun sincronizarTodas(
+        contas: List<ContaEntity>,
+        usuarioId: String
+    ) {
+        contas.forEach { conta ->
+            sincronizar(
+                conta = conta,
+                usuarioId = usuarioId
+            )
+        }
+    }
 }

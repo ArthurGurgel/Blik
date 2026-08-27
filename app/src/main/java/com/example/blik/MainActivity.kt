@@ -908,91 +908,44 @@ fun AppFinanceiro() {
 
             try {
 
-                val contasParaMigrar =
+                val contasParaSincronizar =
                     contaDao.listarTodasUmaVez()
 
-                val quantidadeMigrada =
-                    MigracaoSupabaseRepository.migrarContas(
-                        contas = contasParaMigrar,
-                        usuarioId = usuarioId
-                    )
-
-                if (quantidadeMigrada > 0) {
-
-                    Toast.makeText(
-                        context,
-                        "$quantidadeMigrada conta(s) enviada(s) para a nuvem.",
-                        Toast.LENGTH_LONG
-                    ).show()
-                }
-
+                ContaSyncRepository.sincronizarTodas(
+                    contas = contasParaSincronizar,
+                    usuarioId = usuarioId
+                )
             } catch (e: Exception) {
 
-                Toast.makeText(
-                    context,
-                    "Erro ao migrar contas: ${e.message}",
-                    Toast.LENGTH_LONG
-                ).show()
+            }
+
+            try {
+
+                val categoriasParaSincronizar = categoriaDao.listarTodasUmaVez()
+                CategoriaSyncRepository.sincronizarTodas(
+                    categorias = categoriasParaSincronizar,
+                    usuarioId = usuarioId
+                )
+            } catch (e: Exception) {
+
             }
             try {
 
-                val categoriasParaMigrar =
-                    categoriaDao.listarTodasUmaVez()
-
-                val quantidadeMigrada =
-                    MigracaoSupabaseRepository.migrarCategorias(
-                        categorias = categoriasParaMigrar,
-                        usuarioId = usuarioId
-                    )
-
-                if (quantidadeMigrada > 0) {
-
-                    Toast.makeText(
-                        context,
-                        "$quantidadeMigrada categoria(s) enviada(s) para a nuvem.",
-                        Toast.LENGTH_LONG
-                    ).show()
-                }
-
-            } catch (e: Exception) {
-
-                Toast.makeText(
-                    context,
-                    "Erro ao migrar categorias: ${e.message}",
-                    Toast.LENGTH_LONG
-                ).show()
-            }
-            try {
-
-                val cartoesParaMigrar =
+                val cartoesParaSincronizar =
                     cartaoDao.listarTodosUmaVez()
 
                 val contasParaRelacionamento =
                     contaDao.listarTodasUmaVez()
 
-                val quantidadeMigrada =
-                    MigracaoSupabaseRepository.migrarCartoes(
-                        cartoes = cartoesParaMigrar,
-                        contas = contasParaRelacionamento,
-                        usuarioId = usuarioId
-                    )
 
-                if (quantidadeMigrada > 0) {
-
-                    Toast.makeText(
-                        context,
-                        "$quantidadeMigrada cartão(ões) enviado(s) para a nuvem.",
-                        Toast.LENGTH_LONG
-                    ).show()
-                }
+                CartaoSyncRepository.sincronizarTodos(
+                    cartoes = cartoesParaSincronizar,
+                    contas = contasParaRelacionamento,
+                    usuarioId = usuarioId
+                )
 
             } catch (e: Exception) {
 
-                Toast.makeText(
-                    context,
-                    "Erro ao migrar cartões: ${e.message}",
-                    Toast.LENGTH_LONG
-                ).show()
             }
 
             try {
@@ -1272,7 +1225,7 @@ fun AppFinanceiro() {
                         if (existe) {
                             resultado(false)
                         } else {
-                            cartaoDao.inserir(
+                            val novoCartao =
                                 CartaoEntity(
                                     nome = nomeLimpo,
                                     limite = limite,
@@ -1280,7 +1233,27 @@ fun AppFinanceiro() {
                                     diaVencimento = diaVencimento,
                                     contaId = contaId
                                 )
-                            )
+                            cartaoDao.inserir(novoCartao)
+
+                            val usuarioId = AuthRepository.usuarioAtualId()
+                            if (usuarioId != null) {
+                                try {
+                                    val contasParaRelacionamento =
+                                        contaDao.listarTodasUmaVez()
+
+                                    CartaoSyncRepository.sincronizar(
+                                        cartao = novoCartao,
+                                        contas = contasParaRelacionamento,
+                                        usuarioId = usuarioId
+                                    )
+                                } catch (e: Exception) {
+                                    Toast.makeText(
+                                        context,
+                                        "Cartão salvo no aparelho, mas ainda não foi sincronizado.",
+                                        Toast.LENGTH_LONG
+                                    ).show()
+                                }
+                            }
 
                             resultado(true)
                         }
@@ -1288,36 +1261,86 @@ fun AppFinanceiro() {
                 },
 
                 onEditar = {
-                    cartao,
-                    novoNome,
-                    novoLimite,
-                    novoDiaFechamento,
-                    novoDiaVencimento,
-                    novaContaId,
-                    resultado ->
+                        cartao,
+                        novoNome,
+                        novoLimite,
+                        novoDiaFechamento,
+                        novoDiaVencimento,
+                        novaContaId,
+                        resultado ->
+
                     scope.launch {
+
                         val nomeLimpo =
                             novoNome.trim()
+
                         val existe =
                             cartaoDao.existeOutroNome(
                                 nome = nomeLimpo,
                                 idAtual = cartao.id
                             ) > 0
-                    if (existe) {
-                        resultado(false)
-                    } else {
-                        cartaoDao.editar(
-                            id = cartao.id,
-                            nome = nomeLimpo,
-                            limite = novoLimite,
-                            diaFechamento = novoDiaFechamento,
-                            diaVencimento = novoDiaVencimento,
-                            contaId = novaContaId
-                        )
-                        resultado(true)
+
+                        if (existe) {
+
+                            resultado(false)
+
+                        } else {
+
+                            // Primeiro salva no Room
+                            cartaoDao.editar(
+                                id = cartao.id,
+                                nome = nomeLimpo,
+                                limite = novoLimite,
+                                diaFechamento = novoDiaFechamento,
+                                diaVencimento = novoDiaVencimento,
+                                contaId = novaContaId
+                            )
+
+
+                            // Depois tenta sincronizar com o Supabase
+                            val usuarioId =
+                                AuthRepository.usuarioAtualId()
+
+                            if (usuarioId != null) {
+
+                                try {
+
+                                    val cartaoAtualizado =
+                                        cartaoDao
+                                            .listarTodosUmaVez()
+                                            .firstOrNull { item ->
+                                                item.id == cartao.id
+                                            }
+                                            ?: throw IllegalStateException(
+                                                "Cartão atualizado não encontrado."
+                                            )
+
+
+                                    val contasParaRelacionamento =
+                                        contaDao.listarTodasUmaVez()
+
+
+                                    CartaoSyncRepository.sincronizar(
+                                        cartao = cartaoAtualizado,
+                                        contas = contasParaRelacionamento,
+                                        usuarioId = usuarioId
+                                    )
+
+                                } catch (e: Exception) {
+
+                                    Toast.makeText(
+                                        context,
+                                        "Alteração salva no aparelho, mas ainda não foi sincronizada.",
+                                        Toast.LENGTH_LONG
+                                    ).show()
+                                }
+                            }
+
+
+                            resultado(true)
+                        }
                     }
-                }
-            },
+                },
                 onExcluir = { cartao, resultado ->
 
                     scope.launch {
@@ -1433,11 +1456,26 @@ fun AppFinanceiro() {
                         if (existe) {
                             resultado(false)
                         } else {
-                            categoriaDao.inserir(
-                                CategoriaEntity(
-                                    nome = nomeLimpo
-                                )
-                            )
+                             val novaCategoria = CategoriaEntity(
+                                 nome = nomeLimpo
+                             )
+                            categoriaDao.inserir(novaCategoria)
+
+                            val usuarioId = AuthRepository.usuarioAtualId()
+                            if (usuarioId != null) {
+                                try {
+                                    CategoriaSyncRepository.sincronizar(
+                                        categoria = novaCategoria,
+                                        usuarioId = usuarioId
+                                    )
+                                } catch (e: Exception) {
+                                    Toast.makeText(
+                                        context,
+                                        "Categoria salva no aparelho, mas ainda não foi sincronizada.",
+                                        Toast.LENGTH_LONG
+                                    ).show()
+                                }
+                            }
                             resultado(true)
                         }
                     }
@@ -1458,6 +1496,25 @@ fun AppFinanceiro() {
                                 id = categoria.id,
                                 novoNome = nomeLimpo
                             )
+                            val categoriaAtualizada = categoria.copy(
+                                nome = nomeLimpo
+                            )
+                            val usuarioId = AuthRepository.usuarioAtualId()
+
+                            if (usuarioId != null) {
+                                try {
+                                    CategoriaSyncRepository.sincronizar(
+                                        categoria = categoriaAtualizada,
+                                        usuarioId = usuarioId
+                                    )
+                                } catch(e: Exception) {
+                                    Toast.makeText(
+                                        context,
+                                        "Alteração salva no aparelho, mas ainda não foi sincronizada.",
+                                        Toast.LENGTH_LONG
+                                    ).show()
+                                }
+                            }
                             resultado(true)
                         }
                     }

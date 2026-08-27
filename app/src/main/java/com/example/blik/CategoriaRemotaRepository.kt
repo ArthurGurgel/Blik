@@ -24,4 +24,12 @@ object CategoriaRemotaRepository {
             .select()
             .decodeList<CategoriaRemota>()
     }
+
+    suspend fun sincronizar(
+        categoria: CategoriaRemotaNova
+    ) {
+        SupabaseProvider.client
+            .from("categorias")
+            .upsert(categoria)
+    }
 }
