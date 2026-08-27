@@ -35,4 +35,11 @@ object AuthRepository {
     suspend fun sair() {
         auth.signOut()
     }
+
+    fun usuarioAtualId(): String? {
+        return auth
+            .currentSessionOrNull()
+            ?.user
+            ?.id
+    }
 }

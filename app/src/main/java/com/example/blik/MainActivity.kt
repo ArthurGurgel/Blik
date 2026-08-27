@@ -168,7 +168,59 @@ fun BlikApp() {
 
         is SessionStatus.Authenticated -> {
 
-            AppFinanceiro()
+            val usuarioId =
+                AuthRepository.usuarioAtualId()
+
+            if (usuarioId == null) {
+
+                Box(
+                    modifier =
+                        Modifier.fillMaxSize(),
+                    contentAlignment =
+                        Alignment.Center
+                ) {
+                    CircularProgressIndicator()
+                }
+
+            } else {
+
+                val usuarioValido =
+                    remember(usuarioId) {
+
+                        DadosLocaisUsuario
+                            .vincularOuValidar(
+                                context = context,
+                                usuarioId = usuarioId
+                            )
+                    }
+
+                if (usuarioValido) {
+
+                    AppFinanceiro()
+
+                } else {
+
+                    LaunchedEffect(usuarioId) {
+
+                        Toast.makeText(
+                            context,
+                            "Os dados locais deste aparelho estão vinculados a outra conta.",
+                            Toast.LENGTH_LONG
+                        ).show()
+
+                        AuthRepository.sair()
+                    }
+
+                    Box(
+                        modifier =
+                            Modifier.fillMaxSize(),
+                        contentAlignment =
+                            Alignment.Center
+                    ) {
+                        CircularProgressIndicator()
+                    }
+                }
+            }
         }
 
         is SessionStatus.NotAuthenticated,
