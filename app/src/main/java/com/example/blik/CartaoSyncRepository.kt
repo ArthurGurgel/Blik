@@ -1,5 +1,7 @@
 package com.example.blik
 
+import io.github.jan.supabase.postgrest.from
+
 object CartaoSyncRepository {
 
     suspend fun sincronizar(
@@ -57,5 +59,82 @@ object CartaoSyncRepository {
                 usuarioId = usuarioId
             )
         }
+    }
+
+    suspend fun baixarTodosParaRoom(
+        cartaoDao: CartaoDao,
+        contaDao: ContaDao
+    ): Int {
+
+        // Só faz a carga inicial em um banco local
+        // que ainda não possui cartões.
+        if (cartaoDao.listarTodosUmaVez().isNotEmpty()) {
+            return 0
+        }
+
+        val cartoesRemotos =
+            CartaoRemotoRepository.listar()
+
+        if (cartoesRemotos.isEmpty()) {
+            throw IllegalStateException(
+                "O Supabase retornou 0 cartões."
+            )
+        }
+
+        if (cartoesRemotos.isEmpty()) {
+            return 0
+        }
+
+        val contasLocais =
+            contaDao.listarTodasUmaVez()
+
+
+        cartoesRemotos.forEach { cartaoRemoto ->
+
+            val contaLocal =
+                contasLocais.firstOrNull { conta ->
+                    conta.syncId == cartaoRemoto.contaId
+                }
+                    ?: throw IllegalStateException(
+                        "Não foi encontrada a conta local " +
+                                "do cartão \"${cartaoRemoto.nome}\"."
+                    )
+
+
+            cartaoDao.inserir(
+                CartaoEntity(
+                    nome = cartaoRemoto.nome,
+                    limite = cartaoRemoto.limite,
+                    diaFechamento = cartaoRemoto.diaFechamento,
+                    diaVencimento = cartaoRemoto.diaVencimento,
+
+                    // UUID remoto da conta virou
+                    // o Int local correspondente.
+                    contaId = contaLocal.id,
+
+                    // Mantém o mesmo UUID do cartão.
+                    syncId = cartaoRemoto.id
+                )
+            )
+        }
+
+        return cartoesRemotos.size
+    }
+
+    suspend fun excluir(
+        syncId: String
+    ) {
+
+        SupabaseProvider.client
+            .from("cartoes")
+            .delete {
+
+                filter {
+                    eq(
+                        "id",
+                        syncId
+                    )
+                }
+            }
     }
 }

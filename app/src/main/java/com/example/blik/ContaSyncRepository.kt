@@ -1,5 +1,6 @@
 package com.example.blik
 
+import io.github.jan.supabase.postgrest.from
 object ContaSyncRepository {
 
     suspend fun sincronizar(
@@ -33,5 +34,60 @@ object ContaSyncRepository {
                 usuarioId = usuarioId
             )
         }
+    }
+
+    suspend fun baixarTodasParaRoom(
+        contaDao: ContaDao
+    ): Int {
+
+        // Neste primeiro estágio, o download automático
+        // só acontece em um banco local realmente vazio.
+        if (contaDao.quantidade() > 0) {
+            return 0
+        }
+
+        val contasRemotas =
+            ContaRemotaRepository.listar()
+
+        if (contasRemotas.isEmpty()) {
+            return 0
+        }
+
+        val contasLocais =
+            contasRemotas.map { contaRemota ->
+
+                ContaEntity(
+                    nome = contaRemota.nome,
+                    saldoInicial = contaRemota.saldoInicial,
+                    ativa = contaRemota.ativa,
+
+                    // Fundamental:
+                    // mantém no Room o mesmo UUID do Supabase.
+                    syncId = contaRemota.id
+                )
+            }
+
+        contaDao.inserirTodas(
+            contasLocais
+        )
+
+        return contasLocais.size
+    }
+
+    suspend fun excluir(
+        syncId: String
+    ) {
+
+        SupabaseProvider.client
+            .from("contas")
+            .delete {
+
+                filter {
+                    eq(
+                        "id",
+                        syncId
+                    )
+                }
+            }
     }
 }

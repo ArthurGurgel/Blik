@@ -24,4 +24,12 @@ object MovimentacaoRemotaRepository {
             .select()
             .decodeList<MovimentacaoRemota>()
     }
+
+    suspend fun sincronizar(
+        movimentacao: MovimentacaoRemotaNova
+    ) {
+        SupabaseProvider.client
+            .from("movimentacoes")
+            .upsert(movimentacao)
+    }
 }

@@ -93,7 +93,7 @@ import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.auth.status.SessionStatus
 
 data class Movimentacao(
-   val id: Int = 0,
+    val id: Int = 0,
     val descricao: String,
     val valor: Double,
     val tipo: String,
@@ -814,7 +814,48 @@ fun AppFinanceiro() {
 
     LaunchedEffect(Unit) {
 
-        if (contaDao.quantidade() == 0) {
+        val usuarioId =
+            AuthRepository.usuarioAtualId()
+
+
+        var consultaContasNuvemConcluida =
+            false
+
+
+        if (
+            usuarioId != null &&
+            contaDao.quantidade() == 0
+        ) {
+
+            try {
+
+                val quantidadeBaixada =
+                    ContaSyncRepository.baixarTodasParaRoom(
+                        contaDao = contaDao
+                    )
+
+                consultaContasNuvemConcluida =
+                    true
+
+
+                if (quantidadeBaixada > 0) {
+
+                    Toast.makeText(
+                        context,
+                        "$quantidadeBaixada conta(s) baixada(s) da nuvem.",
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
+
+            } catch (e: Exception) {
+
+            }
+        }
+
+        if (
+            contaDao.quantidade() == 0 &&
+            consultaContasNuvemConcluida
+        ) {
 
             contaDao.inserirTodas(
                 listOf(
@@ -825,7 +866,54 @@ fun AppFinanceiro() {
             )
         }
 
-        if (categoriaDao.quantidade() == 0) {
+        // =============================================
+        // SUPABASE -> ROOM
+        // BAIXA CATEGORIAS EM UM DISPOSITIVO NOVO
+        // =============================================
+
+        var consultaCategoriasNuvemConcluida =
+            false
+
+        if (
+            usuarioId != null &&
+            categoriaDao.quantidade() == 0
+        ) {
+
+            try {
+
+                val quantidadeBaixada =
+                    CategoriaSyncRepository.baixarTodasParaRoom(
+                        categoriaDao = categoriaDao
+                    )
+
+                consultaCategoriasNuvemConcluida =
+                    true
+
+                if (quantidadeBaixada > 0) {
+
+                    Toast.makeText(
+                        context,
+                        "$quantidadeBaixada categoria(s) baixada(s) da nuvem.",
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
+
+            } catch (e: Exception) {
+
+                Toast.makeText(
+                    context,
+                    "ERRO CATEGORIAS: ${e.message}",
+                    Toast.LENGTH_LONG
+                ).show()
+            }
+        }
+
+        // Só cria as categorias padrão quando a consulta à nuvem
+        // terminou corretamente e não havia categorias remotas.
+        if (
+            categoriaDao.quantidade() == 0 &&
+            consultaCategoriasNuvemConcluida
+        ) {
 
             categoriaDao.inserirTodas(
                 listOf(
@@ -839,6 +927,182 @@ fun AppFinanceiro() {
                 )
             )
         }
+
+
+// =============================================
+// SUPABASE -> ROOM
+// BAIXA CARTÕES EM UM DISPOSITIVO NOVO
+// =============================================
+
+        if (
+            usuarioId != null &&
+            cartaoDao.listarTodosUmaVez().isEmpty()
+        ) {
+
+            try {
+
+                val quantidadeBaixada =
+                    CartaoSyncRepository.baixarTodosParaRoom(
+                        cartaoDao = cartaoDao,
+                        contaDao = contaDao
+                    )
+
+
+                if (quantidadeBaixada > 0) {
+
+                    Toast.makeText(
+                        context,
+                        "$quantidadeBaixada cartão(ões) baixado(s) da nuvem.",
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
+
+            } catch (e: Exception) {
+
+                Toast.makeText(
+                    context,
+                    "ERRO CARTÕES: ${e.message}",
+                    Toast.LENGTH_LONG
+                ).show()
+            }
+        }
+
+        // =============================================
+// SUPABASE -> ROOM
+// BAIXA MOVIMENTAÇÕES EM UM DISPOSITIVO NOVO
+// =============================================
+
+        if (
+            usuarioId != null &&
+            dao.listarTodasUmaVez().isEmpty()
+        ) {
+
+            try {
+
+                val quantidadeBaixada =
+                    MovimentacaoSyncRepository.baixarTodasParaRoom(
+                        movimentacaoDao = dao,
+                        contaDao = contaDao,
+                        categoriaDao = categoriaDao,
+                        cartaoDao = cartaoDao
+                    )
+
+
+                if (quantidadeBaixada > 0) {
+
+                    Toast.makeText(
+                        context,
+                        "$quantidadeBaixada movimentação(ões) baixada(s) da nuvem.",
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
+
+            } catch (e: Exception) {
+
+                Toast.makeText(
+                    context,
+                    "Não foi possível baixar as movimentações: ${e.message}",
+                    Toast.LENGTH_LONG
+                ).show()
+            }
+        }
+
+        // =============================================
+// SUPABASE -> ROOM
+// BAIXA PARCELAS EM UM DISPOSITIVO NOVO
+// =============================================
+
+        if (
+            usuarioId != null &&
+            parcelaCartaoDao
+                .listarTodasUmaVez()
+                .isEmpty()
+        ) {
+
+            try {
+
+                val quantidadeBaixada =
+                    ParcelaCartaoSyncRepository
+                        .baixarTodasParaRoom(
+                            parcelaCartaoDao =
+                                parcelaCartaoDao,
+
+                            movimentacaoDao =
+                                dao,
+
+                            cartaoDao =
+                                cartaoDao
+                        )
+
+
+                if (quantidadeBaixada > 0) {
+
+                    Toast.makeText(
+                        context,
+                        "$quantidadeBaixada parcela(s) baixada(s) da nuvem.",
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
+
+
+            } catch (e: Exception) {
+
+                Toast.makeText(
+                    context,
+                    "Não foi possível baixar as parcelas: ${e.message}",
+                    Toast.LENGTH_LONG
+                ).show()
+            }
+        }
+
+        // =============================================
+// SUPABASE -> ROOM
+// BAIXA PAGAMENTOS EM UM DISPOSITIVO NOVO
+// =============================================
+
+        if (
+            usuarioId != null &&
+            pagamentoFaturaDao
+                .listarTodosUmaVez()
+                .isEmpty()
+        ) {
+
+            try {
+
+                val quantidadeBaixada =
+                    PagamentoFaturaSyncRepository
+                        .baixarTodosParaRoom(
+                            pagamentoFaturaDao =
+                                pagamentoFaturaDao,
+
+                            contaDao =
+                                contaDao,
+
+                            cartaoDao =
+                                cartaoDao
+                        )
+
+
+                if (quantidadeBaixada > 0) {
+
+                    Toast.makeText(
+                        context,
+                        "$quantidadeBaixada pagamento(s) baixado(s) da nuvem.",
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
+
+
+            } catch (e: Exception) {
+
+                Toast.makeText(
+                    context,
+                    "Não foi possível baixar os pagamentos: ${e.message}",
+                    Toast.LENGTH_LONG
+                ).show()
+            }
+        }
+
 
         val contasAtualizadas =
             SyncIdRepository.preencherContas(
@@ -901,9 +1165,6 @@ fun AppFinanceiro() {
             ).show()
         }
 
-        val usuarioId =
-            AuthRepository.usuarioAtualId()
-
         if (usuarioId != null) {
 
             try {
@@ -950,7 +1211,7 @@ fun AppFinanceiro() {
 
             try {
 
-                val movimentacoesParaMigrar =
+                val movimentacoesParaSincronizar =
                     dao.listarTodasUmaVez()
 
                 val contasParaRelacionamento =
@@ -963,47 +1224,26 @@ fun AppFinanceiro() {
                     cartaoDao.listarTodosUmaVez()
 
 
-                val quantidadeMigrada =
-                    MigracaoSupabaseRepository
-                        .migrarMovimentacoes(
-                            movimentacoes =
-                                movimentacoesParaMigrar,
-
-                            contas =
-                                contasParaRelacionamento,
-
-                            categorias =
-                                categoriasParaRelacionamento,
-
-                            cartoes =
-                                cartoesParaRelacionamento,
-
-                            usuarioId =
-                                usuarioId
-                        )
-
-
-                if (quantidadeMigrada > 0) {
-
-                    Toast.makeText(
-                        context,
-                        "$quantidadeMigrada movimentação(ões) enviada(s) para a nuvem.",
-                        Toast.LENGTH_LONG
-                    ).show()
-                }
+                MovimentacaoSyncRepository.sincronizarTodas(
+                    movimentacoes = movimentacoesParaSincronizar,
+                    contas = contasParaRelacionamento,
+                    categorias = categoriasParaRelacionamento,
+                    cartoes = cartoesParaRelacionamento,
+                    usuarioId = usuarioId
+                )
 
             } catch (e: Exception) {
 
-                Toast.makeText(
-                    context,
-                    "Erro ao migrar movimentações: ${e.message}",
-                    Toast.LENGTH_LONG
-                ).show()
             }
+
+            // =============================================
+// ROOM -> SUPABASE
+// PARCELAS
+// =============================================
 
             try {
 
-                val parcelasParaMigrar =
+                val parcelasParaSincronizar =
                     parcelaCartaoDao.listarTodasUmaVez()
 
                 val movimentacoesParaRelacionamento =
@@ -1013,44 +1253,38 @@ fun AppFinanceiro() {
                     cartaoDao.listarTodosUmaVez()
 
 
-                val quantidadeMigrada =
-                    MigracaoSupabaseRepository
-                        .migrarParcelas(
-                            parcelas =
-                                parcelasParaMigrar,
+                ParcelaCartaoSyncRepository.sincronizarTodos(
+                    parcelas =
+                        parcelasParaSincronizar,
 
-                            movimentacoes =
-                                movimentacoesParaRelacionamento,
+                    movimentacoes =
+                        movimentacoesParaRelacionamento,
 
-                            cartoes =
-                                cartoesParaRelacionamento,
+                    cartoes =
+                        cartoesParaRelacionamento,
 
-                            usuarioId =
-                                usuarioId
-                        )
-
-
-                if (quantidadeMigrada > 0) {
-
-                    Toast.makeText(
-                        context,
-                        "$quantidadeMigrada parcela(s) enviada(s) para a nuvem.",
-                        Toast.LENGTH_LONG
-                    ).show()
-                }
+                    usuarioId =
+                        usuarioId
+                )
 
             } catch (e: Exception) {
 
                 Toast.makeText(
                     context,
-                    "Erro ao migrar parcelas: ${e.message}",
+                    "Não foi possível sincronizar as parcelas: ${e.message}",
                     Toast.LENGTH_LONG
                 ).show()
             }
 
+
+// =============================================
+// ROOM -> SUPABASE
+// PAGAMENTOS
+// =============================================
+
             try {
 
-                val pagamentosParaMigrar =
+                val pagamentosParaSincronizar =
                     pagamentoFaturaDao.listarTodosUmaVez()
 
                 val contasParaRelacionamento =
@@ -1060,42 +1294,29 @@ fun AppFinanceiro() {
                     cartaoDao.listarTodosUmaVez()
 
 
-                val quantidadeMigrada =
-                    MigracaoSupabaseRepository
-                        .migrarPagamentos(
-                            pagamentos =
-                                pagamentosParaMigrar,
+                PagamentoFaturaSyncRepository.sincronizarTodos(
+                    pagamentos =
+                        pagamentosParaSincronizar,
 
-                            contas =
-                                contasParaRelacionamento,
+                    contas =
+                        contasParaRelacionamento,
 
-                            cartoes =
-                                cartoesParaRelacionamento,
+                    cartoes =
+                        cartoesParaRelacionamento,
 
-                            usuarioId =
-                                usuarioId
-                        )
-
-
-                if (quantidadeMigrada > 0) {
-
-                    Toast.makeText(
-                        context,
-                        "$quantidadeMigrada pagamento(s) enviado(s) para a nuvem.",
-                        Toast.LENGTH_LONG
-                    ).show()
-                }
+                    usuarioId =
+                        usuarioId
+                )
 
             } catch (e: Exception) {
 
                 Toast.makeText(
                     context,
-                    "Erro ao migrar pagamentos: ${e.message}",
+                    "Não foi possível sincronizar os pagamentos: ${e.message}",
                     Toast.LENGTH_LONG
                 ).show()
             }
         }
-
 
     }
 
@@ -1212,12 +1433,12 @@ fun AppFinanceiro() {
                 contas = contas,
 
                 onAdicionar ={
-                    nome,
-                    limite,
-                    diaFechamento,
-                    diaVencimento,
-                    contaId,
-                    resultado ->
+                        nome,
+                        limite,
+                        diaFechamento,
+                        diaVencimento,
+                        contaId,
+                        resultado ->
                     scope.launch {
                         val nomeLimpo = nome.trim()
                         val existe =
@@ -1360,6 +1581,7 @@ fun AppFinanceiro() {
                                 pagamento.cartaoId == cartao.id
                             }
 
+
                         if (
                             quantidadeMovimentacoes > 0 ||
                             quantidadeParcelas > 0 ||
@@ -1375,9 +1597,35 @@ fun AppFinanceiro() {
 
                             try {
 
+                                val cartaoLocal =
+                                    cartaoDao
+                                        .listarTodosUmaVez()
+                                        .firstOrNull { item ->
+                                            item.id == cartao.id
+                                        }
+                                        ?: throw IllegalStateException(
+                                            "Cartão local não encontrado."
+                                        )
+
+
+                                val syncId =
+                                    cartaoLocal.syncId
+                                        ?: throw IllegalStateException(
+                                            "O cartão não possui syncId."
+                                        )
+
+
+                                // Primeiro Supabase
+                                CartaoSyncRepository.excluir(
+                                    syncId = syncId
+                                )
+
+
+                                // Depois Room
                                 cartaoDao.excluir(
                                     cartao.id
                                 )
+
 
                                 resultado(
                                     true,
@@ -1391,6 +1639,13 @@ fun AppFinanceiro() {
                                 resultado(
                                     false,
                                     "Não é possível excluir o cartão \"${cartao.nome}\" porque ainda existem registros vinculados a ele."
+                                )
+
+                            } catch (e: Exception) {
+
+                                resultado(
+                                    false,
+                                    "Não foi possível excluir o cartão: ${e.message}"
                                 )
                             }
                         }
@@ -1417,30 +1672,145 @@ fun AppFinanceiro() {
                         ano,
                         valor,
                         data ->
-                            scope.launch {
-                                pagamentoFaturaDao.inserir(
-                                    PagamentoFaturaEntity(
-                                        cartaoId = cartaoId,
-                                        contaId = contaId,
-                                        mesFatura = mes,
-                                        anoFatura = ano,
-                                        valorPago = valor,
-                                        dataPagamento = data
-                                    )
+
+                    scope.launch {
+
+                        val novoPagamento =
+                            PagamentoFaturaEntity(
+                                cartaoId =
+                                    cartaoId,
+
+                                contaId =
+                                    contaId,
+
+                                mesFatura =
+                                    mes,
+
+                                anoFatura =
+                                    ano,
+
+                                valorPago =
+                                    valor,
+
+                                dataPagamento =
+                                    data
+                            )
+
+
+                        // Primeiro salva localmente.
+                        pagamentoFaturaDao.inserir(
+                            novoPagamento
+                        )
+
+
+                        // Depois tenta sincronizar.
+                        val usuarioId =
+                            AuthRepository.usuarioAtualId()
+
+                        if (usuarioId != null) {
+
+                            try {
+
+                                val contasParaRelacionamento =
+                                    contaDao.listarTodasUmaVez()
+
+                                val cartoesParaRelacionamento =
+                                    cartaoDao.listarTodosUmaVez()
+
+
+                                PagamentoFaturaSyncRepository.sincronizar(
+                                    pagamento =
+                                        novoPagamento,
+
+                                    contas =
+                                        contasParaRelacionamento,
+
+                                    cartoes =
+                                        cartoesParaRelacionamento,
+
+                                    usuarioId =
+                                        usuarioId
                                 )
+
+                            } catch (e: Exception) {
+
+                                Toast.makeText(
+                                    context,
+                                    "Pagamento salvo no aparelho, mas ainda não foi sincronizado.",
+                                    Toast.LENGTH_LONG
+                                ).show()
                             }
-                    },
-                    onExcluirPagamento = { pagamento ->
-                        scope.launch {
+                        }
+                    }
+                },
+                onExcluirPagamento = { pagamento ->
+
+                    scope.launch {
+
+                        try {
+
+                            // =============================================
+                            // LOCALIZA A ENTITY ORIGINAL NO ROOM
+                            // PARA OBTER O syncId
+                            // =============================================
+
+                            val pagamentoLocal =
+                                pagamentoFaturaDao
+                                    .listarTodosUmaVez()
+                                    .firstOrNull { item ->
+                                        item.id == pagamento.id
+                                    }
+                                    ?: throw IllegalStateException(
+                                        "Pagamento local não encontrado."
+                                    )
+
+
+                            val syncId =
+                                pagamentoLocal.syncId
+                                    ?: throw IllegalStateException(
+                                        "O pagamento não possui syncId."
+                                    )
+
+
+                            // =============================================
+                            // PRIMEIRO EXCLUI DO SUPABASE
+                            // =============================================
+
+                            PagamentoFaturaSyncRepository.excluir(
+                                syncId = syncId
+                            )
+
+
+                            // =============================================
+                            // SOMENTE DEPOIS EXCLUI DO ROOM
+                            // =============================================
+
                             pagamentoFaturaDao.excluir(
                                 pagamento.id
                             )
-                        }
-                    },
 
-                    onVoltar = {
-                        telaAtual = "inicio"
+
+                            Toast.makeText(
+                                context,
+                                "Pagamento excluído.",
+                                Toast.LENGTH_SHORT
+                            ).show()
+
+
+                        } catch (e: Exception) {
+
+                            Toast.makeText(
+                                context,
+                                "Não foi possível excluir o pagamento: ${e.message}",
+                                Toast.LENGTH_LONG
+                            ).show()
+                        }
                     }
+                },
+
+                onVoltar = {
+                    telaAtual = "inicio"
+                }
             )
         }
 
@@ -1456,9 +1826,9 @@ fun AppFinanceiro() {
                         if (existe) {
                             resultado(false)
                         } else {
-                             val novaCategoria = CategoriaEntity(
-                                 nome = nomeLimpo
-                             )
+                            val novaCategoria = CategoriaEntity(
+                                nome = nomeLimpo
+                            )
                             categoriaDao.inserir(novaCategoria)
 
                             val usuarioId = AuthRepository.usuarioAtualId()
@@ -1521,12 +1891,14 @@ fun AppFinanceiro() {
                 },
 
                 onExcluir = { categoria, resultado ->
+
                     scope.launch {
 
                         val quantidade =
                             dao.quantidadePorCategoria(
                                 categoria.id
                             )
+
 
                         if (quantidade > 0) {
 
@@ -1537,14 +1909,51 @@ fun AppFinanceiro() {
 
                         } else {
 
-                            categoriaDao.excluir(
-                                categoria.id
-                            )
+                            try {
 
-                            resultado(
-                                true,
-                                0
-                            )
+                                val categoriaLocal =
+                                    categoriaDao
+                                        .listarTodasUmaVez()
+                                        .firstOrNull { item ->
+                                            item.id == categoria.id
+                                        }
+                                        ?: throw IllegalStateException(
+                                            "Categoria local não encontrada."
+                                        )
+
+
+                                val syncId =
+                                    categoriaLocal.syncId
+                                        ?: throw IllegalStateException(
+                                            "A categoria não possui syncId."
+                                        )
+
+
+                                // Primeiro Supabase
+                                CategoriaSyncRepository.excluir(
+                                    syncId = syncId
+                                )
+
+
+                                // Depois Room
+                                categoriaDao.excluir(
+                                    categoria.id
+                                )
+
+
+                                resultado(
+                                    true,
+                                    0
+                                )
+
+                            } catch (e: Exception) {
+
+                                Toast.makeText(
+                                    context,
+                                    "Não foi possível excluir a categoria: ${e.message}",
+                                    Toast.LENGTH_LONG
+                                ).show()
+                            }
                         }
                     }
                 },
@@ -1565,40 +1974,54 @@ fun AppFinanceiro() {
 
                     scope.launch {
 
+                        // =============================================
+                        // CRIA A MOVIMENTAÇÃO LOCAL
+                        // =============================================
+
+                        val novaMovimentacaoEntity =
+                            MovimentacaoEntity(
+                                descricao =
+                                    novaMovimentacao.descricao,
+
+                                valor =
+                                    novaMovimentacao.valor,
+
+                                tipo =
+                                    novaMovimentacao.tipo,
+
+                                formaPagamento =
+                                    novaMovimentacao.formaPagamento,
+
+                                contaId =
+                                    novaMovimentacao.contaId,
+
+                                contaDestinoId =
+                                    novaMovimentacao.contaDestinoId,
+
+                                categoriaId =
+                                    novaMovimentacao.categoriaId,
+
+                                cartaoId =
+                                    novaMovimentacao.cartaoId,
+
+                                quantidadeParcelas =
+                                    novaMovimentacao.quantidadeParcelas,
+
+                                data =
+                                    novaMovimentacao.data
+                            )
+
+
                         val idMovimentacao =
                             dao.inserir(
-                                MovimentacaoEntity(
-                                    descricao =
-                                        novaMovimentacao.descricao,
-
-                                    valor =
-                                        novaMovimentacao.valor,
-
-                                    tipo =
-                                        novaMovimentacao.tipo,
-
-                                    formaPagamento =
-                                        novaMovimentacao.formaPagamento,
-
-                                    contaId =
-                                        novaMovimentacao.contaId,
-
-                                    contaDestinoId =
-                                        novaMovimentacao.contaDestinoId,
-
-                                    categoriaId =
-                                        novaMovimentacao.categoriaId,
-
-                                    cartaoId =
-                                        novaMovimentacao.cartaoId,
-
-                                    quantidadeParcelas =
-                                        novaMovimentacao.quantidadeParcelas,
-
-                                    data =
-                                        novaMovimentacao.data
-                                )
+                                novaMovimentacaoEntity
                             )
+
+
+                        // =============================================
+                        // GERA PARCELAS SE FOR COMPRA NO CRÉDITO
+                        // =============================================
+
                         if (
                             novaMovimentacao.tipo == "Saída" &&
                             novaMovimentacao.formaPagamento == "Crédito"
@@ -1619,17 +2042,122 @@ fun AppFinanceiro() {
 
                                 val parcelas =
                                     gerarParcelasCartao(
-                                        movimentacaoId = idMovimentacao.toInt(),
-                                        cartaoId = cartaoId,
-                                        valorTotal = novaMovimentacao.valor,
-                                        quantidadeParcelas = novaMovimentacao.quantidadeParcelas,
-                                        dataCompra = novaMovimentacao.data,
-                                        diaFechamento = cartao.diaFechamento,
-                                        diaVencimento = cartao.diaVencimento
+                                        movimentacaoId =
+                                            idMovimentacao.toInt(),
+
+                                        cartaoId =
+                                            cartaoId,
+
+                                        valorTotal =
+                                            novaMovimentacao.valor,
+
+                                        quantidadeParcelas =
+                                            novaMovimentacao.quantidadeParcelas,
+
+                                        dataCompra =
+                                            novaMovimentacao.data,
+
+                                        diaFechamento =
+                                            cartao.diaFechamento,
+
+                                        diaVencimento =
+                                            cartao.diaVencimento
                                     )
 
                                 parcelaCartaoDao
-                                    .inserirTodas(parcelas)
+                                    .inserirTodas(
+                                        parcelas
+                                    )
+                            }
+                        }
+
+
+                        // =============================================
+                        // TENTA SINCRONIZAR A MOVIMENTAÇÃO
+                        // =============================================
+
+                        val usuarioId =
+                            AuthRepository.usuarioAtualId()
+
+                        if (usuarioId != null) {
+
+                            try {
+
+                                val contasParaRelacionamento =
+                                    contaDao.listarTodasUmaVez()
+
+                                val categoriasParaRelacionamento =
+                                    categoriaDao.listarTodasUmaVez()
+
+                                val cartoesParaRelacionamento =
+                                    cartaoDao.listarTodosUmaVez()
+
+
+                                // =============================================
+                                // SINCRONIZA PRIMEIRO A MOVIMENTAÇÃO
+                                // =============================================
+
+                                MovimentacaoSyncRepository.sincronizar(
+                                    movimentacao =
+                                        novaMovimentacaoEntity,
+
+                                    contas =
+                                        contasParaRelacionamento,
+
+                                    categorias =
+                                        categoriasParaRelacionamento,
+
+                                    cartoes =
+                                        cartoesParaRelacionamento,
+
+                                    usuarioId =
+                                        usuarioId
+                                )
+
+
+                                // =============================================
+                                // SINCRONIZA AS PARCELAS DA MOVIMENTAÇÃO
+                                // =============================================
+
+                                val parcelasParaSincronizar =
+                                    parcelaCartaoDao
+                                        .listarTodasUmaVez()
+                                        .filter { parcela ->
+
+                                            parcela.movimentacaoId ==
+                                                    idMovimentacao.toInt()
+                                        }
+
+
+                                if (parcelasParaSincronizar.isNotEmpty()) {
+
+                                    val movimentacoesParaRelacionamento =
+                                        dao.listarTodasUmaVez()
+
+
+                                    ParcelaCartaoSyncRepository
+                                        .sincronizarTodos(
+                                            parcelas =
+                                                parcelasParaSincronizar,
+
+                                            movimentacoes =
+                                                movimentacoesParaRelacionamento,
+
+                                            cartoes =
+                                                cartoesParaRelacionamento,
+
+                                            usuarioId =
+                                                usuarioId
+                                        )
+                                }
+
+                            } catch (e: Exception) {
+
+                                Toast.makeText(
+                                    context,
+                                    "Movimentação salva no aparelho, mas ainda não foi sincronizada.",
+                                    Toast.LENGTH_LONG
+                                ).show()
                             }
                         }
 
@@ -1656,37 +2184,27 @@ fun AppFinanceiro() {
                     scope.launch {
 
                         // =============================================
-                        // EDITA A MOVIMENTAÇÃO
+                        // GUARDA AS PARCELAS ANTIGAS
+                        // ANTES DE ALTERAR QUALQUER COISA
                         // =============================================
 
-                        dao.editar(
-                            id = movimentacao.id,
-                            descricao = movimentacao.descricao,
-                            valor = movimentacao.valor,
-                            tipo = movimentacao.tipo,
-                            formaPagamento = movimentacao.formaPagamento,
-                            contaId = movimentacao.contaId,
-                            contaDestinoId = movimentacao.contaDestinoId,
-                            categoriaId = movimentacao.categoriaId,
-                            cartaoId = movimentacao.cartaoId,
-                            quantidadeParcelas =
-                                movimentacao.quantidadeParcelas,
-                            data = movimentacao.data
-                        )
+                        val parcelasAntigas =
+                            parcelaCartaoDao
+                                .listarTodasUmaVez()
+                                .filter { parcela ->
+                                    parcela.movimentacaoId ==
+                                            movimentacao.id
+                                }
 
 
                         // =============================================
-                        // GUARDA QUAIS PARCELAS JÁ ERAM HISTÓRICAS
+                        // PRESERVA O HISTÓRICO DAS PARCELAS
                         // =============================================
 
                         val quitadasAnteriormentePreservadas =
-                            parcelasCartao
+                            parcelasAntigas
                                 .filter { parcela ->
-
-                                    parcela.movimentacaoId ==
-                                            movimentacao.id &&
-
-                                            parcela.quitadaAnteriormente
+                                    parcela.quitadaAnteriormente
                                 }
                                 .map { parcela ->
                                     parcela.numeroParcela
@@ -1695,7 +2213,47 @@ fun AppFinanceiro() {
 
 
                         // =============================================
-                        // REMOVE AS PARCELAS ANTIGAS
+                        // EDITA A MOVIMENTAÇÃO NO ROOM
+                        // =============================================
+
+                        dao.editar(
+                            id =
+                                movimentacao.id,
+
+                            descricao =
+                                movimentacao.descricao,
+
+                            valor =
+                                movimentacao.valor,
+
+                            tipo =
+                                movimentacao.tipo,
+
+                            formaPagamento =
+                                movimentacao.formaPagamento,
+
+                            contaId =
+                                movimentacao.contaId,
+
+                            contaDestinoId =
+                                movimentacao.contaDestinoId,
+
+                            categoriaId =
+                                movimentacao.categoriaId,
+
+                            cartaoId =
+                                movimentacao.cartaoId,
+
+                            quantidadeParcelas =
+                                movimentacao.quantidadeParcelas,
+
+                            data =
+                                movimentacao.data
+                        )
+
+
+                        // =============================================
+                        // REMOVE AS PARCELAS LOCAIS ANTIGAS
                         // =============================================
 
                         parcelaCartaoDao
@@ -1705,8 +2263,12 @@ fun AppFinanceiro() {
 
 
                         // =============================================
-                        // RECRIA SE CONTINUAR SENDO COMPRA NO CRÉDITO
+                        // PREPARA AS NOVAS PARCELAS
                         // =============================================
+
+                        var parcelasNovas =
+                            emptyList<ParcelaCartaoEntity>()
+
 
                         if (
                             movimentacao.tipo == "Saída" &&
@@ -1727,7 +2289,7 @@ fun AppFinanceiro() {
                                 cartao != null
                             ) {
 
-                                val parcelas =
+                                val parcelasGeradas =
                                     gerarParcelasCartao(
                                         movimentacaoId =
                                             movimentacao.id,
@@ -1755,10 +2317,189 @@ fun AppFinanceiro() {
                                     )
 
 
+                                // =============================================
+                                // PRESERVA O syncId DAS PARCELAS EXISTENTES
+                                // =============================================
+
+                                parcelasNovas =
+                                    parcelasGeradas.map { parcelaNova ->
+
+                                        val parcelaAntiga =
+                                            parcelasAntigas
+                                                .firstOrNull { antiga ->
+
+                                                    antiga.numeroParcela ==
+                                                            parcelaNova.numeroParcela
+                                                }
+
+
+                                        if (
+                                            parcelaAntiga?.syncId != null
+                                        ) {
+
+                                            parcelaNova.copy(
+                                                syncId =
+                                                    parcelaAntiga.syncId
+                                            )
+
+                                        } else {
+
+                                            // Parcela realmente nova.
+                                            // Mantém o UUID criado pelo Entity.
+                                            parcelaNova
+                                        }
+                                    }
+
+
                                 parcelaCartaoDao
                                     .inserirTodas(
-                                        parcelas
+                                        parcelasNovas
                                     )
+                            }
+                        }
+
+
+                        // =============================================
+                        // SINCRONIZA COM O SUPABASE
+                        // =============================================
+
+                        val usuarioId =
+                            AuthRepository.usuarioAtualId()
+
+
+                        if (usuarioId != null) {
+
+                            try {
+
+                                // =============================================
+                                // MOVIMENTAÇÃO ATUALIZADA
+                                // =============================================
+
+                                val movimentacaoAtualizada =
+                                    dao
+                                        .listarTodasUmaVez()
+                                        .firstOrNull { item ->
+                                            item.id ==
+                                                    movimentacao.id
+                                        }
+                                        ?: throw IllegalStateException(
+                                            "Movimentação atualizada não encontrada."
+                                        )
+
+
+                                val contasParaRelacionamento =
+                                    contaDao.listarTodasUmaVez()
+
+                                val categoriasParaRelacionamento =
+                                    categoriaDao.listarTodasUmaVez()
+
+                                val cartoesParaRelacionamento =
+                                    cartaoDao.listarTodosUmaVez()
+
+
+                                // =============================================
+                                // 1. ATUALIZA A MOVIMENTAÇÃO
+                                // =============================================
+
+                                MovimentacaoSyncRepository.sincronizar(
+                                    movimentacao =
+                                        movimentacaoAtualizada,
+
+                                    contas =
+                                        contasParaRelacionamento,
+
+                                    categorias =
+                                        categoriasParaRelacionamento,
+
+                                    cartoes =
+                                        cartoesParaRelacionamento,
+
+                                    usuarioId =
+                                        usuarioId
+                                )
+
+
+                                // =============================================
+                                // 2. ATUALIZA/CRIA AS PARCELAS ATUAIS
+                                // =============================================
+
+                                if (
+                                    parcelasNovas.isNotEmpty()
+                                ) {
+
+                                    val movimentacoesParaRelacionamento =
+                                        dao.listarTodasUmaVez()
+
+
+                                    ParcelaCartaoSyncRepository
+                                        .sincronizarTodos(
+                                            parcelas =
+                                                parcelasNovas,
+
+                                            movimentacoes =
+                                                movimentacoesParaRelacionamento,
+
+                                            cartoes =
+                                                cartoesParaRelacionamento,
+
+                                            usuarioId =
+                                                usuarioId
+                                        )
+                                }
+
+
+                                // =============================================
+                                // 3. DESCOBRE PARCELAS QUE DEIXARAM DE EXISTIR
+                                // =============================================
+
+                                val syncIdsAtuais =
+                                    parcelasNovas
+                                        .mapNotNull { parcela ->
+                                            parcela.syncId
+                                        }
+                                        .toSet()
+
+
+                                val parcelasParaExcluir =
+                                    parcelasAntigas
+                                        .filter { parcelaAntiga ->
+
+                                            val syncIdAntigo =
+                                                parcelaAntiga.syncId
+
+                                            syncIdAntigo != null &&
+                                                    syncIdAntigo !in
+                                                    syncIdsAtuais
+                                        }
+
+
+                                // =============================================
+                                // 4. EXCLUI AS PARCELAS OBSOLETAS DA NUVEM
+                                // =============================================
+
+                                parcelasParaExcluir
+                                    .forEach { parcelaAntiga ->
+
+                                        val syncId =
+                                            parcelaAntiga.syncId
+                                                ?: return@forEach
+
+
+                                        ParcelaCartaoSyncRepository
+                                            .excluir(
+                                                syncId =
+                                                    syncId
+                                            )
+                                    }
+
+
+                            } catch (e: Exception) {
+
+                                Toast.makeText(
+                                    context,
+                                    "Alteração salva no aparelho, mas ainda não foi sincronizada: ${e.message}",
+                                    Toast.LENGTH_LONG
+                                ).show()
                             }
                         }
 
@@ -2019,14 +2760,41 @@ fun AppFinanceiro() {
 
                                 try {
 
+                                    val contaLocal =
+                                        contaDao
+                                            .listarTodasUmaVez()
+                                            .firstOrNull { item ->
+                                                item.id == conta.id
+                                            }
+                                            ?: throw IllegalStateException(
+                                                "Conta local não encontrada."
+                                            )
+
+
+                                    val syncId =
+                                        contaLocal.syncId
+                                            ?: throw IllegalStateException(
+                                                "A conta não possui syncId."
+                                            )
+
+
+                                    // Primeiro exclui no Supabase
+                                    ContaSyncRepository.excluir(
+                                        syncId = syncId
+                                    )
+
+
+                                    // Depois exclui no Room
                                     contaDao.excluir(
                                         conta.id
                                     )
+
 
                                     resultado(
                                         true,
                                         ""
                                     )
+
 
                                 } catch (
                                     e: android.database.sqlite.SQLiteConstraintException
@@ -2037,6 +2805,14 @@ fun AppFinanceiro() {
                                         "Não é possível excluir a conta \"${conta.nome}\" " +
                                                 "porque ainda existem registros vinculados a ela. " +
                                                 "Desative a conta para preservar o histórico."
+                                    )
+
+
+                                } catch (e: Exception) {
+
+                                    resultado(
+                                        false,
+                                        "Não foi possível excluir a conta: ${e.message}"
                                     )
                                 }
                             }
@@ -2066,12 +2842,66 @@ fun AppFinanceiro() {
                 onExcluir = { movimentacao ->
 
                     scope.launch {
-                        parcelaCartaoDao.excluirPorMovimentacao(
-                            movimentacao.id
-                        )
-                        dao.excluir(
-                            movimentacao.id
-                        )
+
+                        try {
+
+                            val movimentacaoLocal =
+                                dao
+                                    .listarTodasUmaVez()
+                                    .firstOrNull { item ->
+                                        item.id == movimentacao.id
+                                    }
+                                    ?: throw IllegalStateException(
+                                        "Movimentação local não encontrada."
+                                    )
+
+
+                            val syncId =
+                                movimentacaoLocal.syncId
+                                    ?: throw IllegalStateException(
+                                        "A movimentação não possui syncId."
+                                    )
+
+
+                            // =============================================
+                            // PRIMEIRO SUPABASE
+                            // =============================================
+
+                            MovimentacaoSyncRepository.excluir(
+                                syncId = syncId
+                            )
+
+
+                            // =============================================
+                            // DEPOIS ROOM
+                            // FILHOS -> PAI
+                            // =============================================
+
+                            parcelaCartaoDao
+                                .excluirPorMovimentacao(
+                                    movimentacao.id
+                                )
+
+                            dao.excluir(
+                                movimentacao.id
+                            )
+
+
+                            Toast.makeText(
+                                context,
+                                "Movimentação excluída.",
+                                Toast.LENGTH_SHORT
+                            ).show()
+
+
+                        } catch (e: Exception) {
+
+                            Toast.makeText(
+                                context,
+                                "Não foi possível excluir a movimentação: ${e.message}",
+                                Toast.LENGTH_LONG
+                            ).show()
+                        }
                     }
                 },
 
@@ -2684,8 +3514,8 @@ fun TelaInicial(
         parcelasCartao.filter { parcela ->
 
             parcela.mesFatura == mesAtualInt &&
-            parcela.anoFatura == anoAtualInt &&
-            !parcela.quitadaAnteriormente
+                    parcela.anoFatura == anoAtualInt &&
+                    !parcela.quitadaAnteriormente
         }
 
     val faturasAtuais = parcelasFaturaAtual
@@ -2693,16 +3523,16 @@ fun TelaInicial(
             parcela.cartaoId }
         .mapNotNull { (cartaoId, parcelasDoCartao) ->
             val cartao = cartoes.find { item ->
-                            item.id == cartaoId
-                } ?: return@mapNotNull null
+                item.id == cartaoId
+            } ?: return@mapNotNull null
 
             val total = parcelasDoCartao.sumOf { it.valor}
 
             val pago = pagamentosFaturaComConta
                 .filter { pagamento ->
                     pagamento.cartaoId == cartaoId &&
-                    pagamento.mesFatura == mesAtualInt &&
-                    pagamento.anoFatura == anoAtualInt
+                            pagamento.mesFatura == mesAtualInt &&
+                            pagamento.anoFatura == anoAtualInt
                 }
                 .sumOf { it.valorPago}
 
@@ -2760,7 +3590,7 @@ fun TelaInicial(
 
     val nomeMesAtual =
         nomesMeses[
-                mesAtual.toInt() - 1
+            mesAtual.toInt() - 1
         ]
 
     val periodoAtual =
@@ -3267,229 +4097,229 @@ fun TelaInicial(
 
         ) { innerPadding ->
 
-           LazyColumn(
+            LazyColumn(
                 modifier = Modifier
                     .padding(innerPadding)
                     .fillMaxSize(),
 
-               contentPadding = androidx.compose.foundation.layout.PaddingValues (
-                   start = 20.dp,
-                   end = 20.dp,
-                   top = 12.dp,
-                   bottom = 100.dp
-               )
-           ) {
-               item {
-                   Card(
-                       modifier = Modifier.fillMaxWidth(),
-                       shape =
-                           androidx.compose.foundation.shape.RoundedCornerShape(
-                               24.dp
-                           ),
-                       colors =
-                           androidx.compose.material3.CardDefaults.cardColors(
-                               containerColor =
-                                   MaterialTheme.colorScheme.primaryContainer
-                           )
-                   ) {
+                contentPadding = androidx.compose.foundation.layout.PaddingValues (
+                    start = 20.dp,
+                    end = 20.dp,
+                    top = 12.dp,
+                    bottom = 100.dp
+                )
+            ) {
+                item {
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape =
+                            androidx.compose.foundation.shape.RoundedCornerShape(
+                                24.dp
+                            ),
+                        colors =
+                            androidx.compose.material3.CardDefaults.cardColors(
+                                containerColor =
+                                    MaterialTheme.colorScheme.primaryContainer
+                            )
+                    ) {
 
-                       Column(
-                           modifier =
-                               Modifier.padding(
-                                   horizontal = 22.dp,
-                                   vertical = 20.dp
-                               )
-                       ) {
+                        Column(
+                            modifier =
+                                Modifier.padding(
+                                    horizontal = 22.dp,
+                                    vertical = 20.dp
+                                )
+                        ) {
 
-                           Text(
-                               text = "Saldo total",
-                               fontSize = 16.sp,
-                               color =
-                                   MaterialTheme.colorScheme
-                                       .onPrimaryContainer
-                                       .copy(alpha = 0.80f)
-                           )
+                            Text(
+                                text = "Saldo total",
+                                fontSize = 16.sp,
+                                color =
+                                    MaterialTheme.colorScheme
+                                        .onPrimaryContainer
+                                        .copy(alpha = 0.80f)
+                            )
 
-                           Spacer(
-                               modifier = Modifier.height(1.dp)
-                           )
+                            Spacer(
+                                modifier = Modifier.height(1.dp)
+                            )
 
-                           Text(
-                               text =
-                                   formatarDinheiro(
-                                       saldoAtual
-                                   ),
-                               fontSize = 32.sp,
-                               fontWeight = FontWeight.Bold,
-                               color =
-                                   MaterialTheme.colorScheme
-                                       .onPrimaryContainer
-                           )
+                            Text(
+                                text =
+                                    formatarDinheiro(
+                                        saldoAtual
+                                    ),
+                                fontSize = 32.sp,
+                                fontWeight = FontWeight.Bold,
+                                color =
+                                    MaterialTheme.colorScheme
+                                        .onPrimaryContainer
+                            )
 
-                           Spacer(
-                               modifier = Modifier.height(16.dp)
-                           )
+                            Spacer(
+                                modifier = Modifier.height(16.dp)
+                            )
 
-                           Row(
-                               modifier =
-                                   Modifier.fillMaxWidth(),
-                               horizontalArrangement =
-                                   Arrangement.SpaceBetween,
-                               verticalAlignment =
-                                   androidx.compose.ui.Alignment
-                                       .Top
-                           ) {
+                            Row(
+                                modifier =
+                                    Modifier.fillMaxWidth(),
+                                horizontalArrangement =
+                                    Arrangement.SpaceBetween,
+                                verticalAlignment =
+                                    androidx.compose.ui.Alignment
+                                        .Top
+                            ) {
 
-                               Column(
-                                   modifier =
-                                       Modifier.weight(1f)
-                               ) {
+                                Column(
+                                    modifier =
+                                        Modifier.weight(1f)
+                                ) {
 
-                                   Text(
-                                       text = "Entradas",
-                                       fontSize = 14.sp,
-                                       fontWeight = FontWeight.Medium,
-                                       color =
-                                           MaterialTheme.colorScheme
-                                               .onPrimaryContainer
-                                               .copy(alpha = 0.70f)
-                                   )
+                                    Text(
+                                        text = "Entradas",
+                                        fontSize = 14.sp,
+                                        fontWeight = FontWeight.Medium,
+                                        color =
+                                            MaterialTheme.colorScheme
+                                                .onPrimaryContainer
+                                                .copy(alpha = 0.70f)
+                                    )
 
-                                   Spacer(
-                                       modifier =
-                                           Modifier.height(0.dp)
-                                   )
+                                    Spacer(
+                                        modifier =
+                                            Modifier.height(0.dp)
+                                    )
 
-                                   Text(
-                                       text =
-                                           formatarDinheiro(
-                                               entradasDoMes
-                                           ),
-                                       fontWeight =
-                                           FontWeight.SemiBold,
-                                       fontSize = 16.sp,
-                                       color =
-                                           MaterialTheme.colorScheme
-                                               .onPrimaryContainer
-                                   )
-                               }
+                                    Text(
+                                        text =
+                                            formatarDinheiro(
+                                                entradasDoMes
+                                            ),
+                                        fontWeight =
+                                            FontWeight.SemiBold,
+                                        fontSize = 16.sp,
+                                        color =
+                                            MaterialTheme.colorScheme
+                                                .onPrimaryContainer
+                                    )
+                                }
 
-                               Column(
-                                   modifier =
-                                       Modifier.weight(1f),
-                                   horizontalAlignment =
-                                       androidx.compose.ui.Alignment
-                                           .CenterHorizontally
-                               ) {
+                                Column(
+                                    modifier =
+                                        Modifier.weight(1f),
+                                    horizontalAlignment =
+                                        androidx.compose.ui.Alignment
+                                            .CenterHorizontally
+                                ) {
 
-                                   Text(
-                                       text = periodoAtual,
-                                       fontSize = 12.sp,
-                                       fontWeight =
-                                           FontWeight.Medium,
-                                       color =
-                                           MaterialTheme.colorScheme
-                                               .onPrimaryContainer
-                                               .copy(alpha = 0.75f)
-                                   )
+                                    Text(
+                                        text = periodoAtual,
+                                        fontSize = 12.sp,
+                                        fontWeight =
+                                            FontWeight.Medium,
+                                        color =
+                                            MaterialTheme.colorScheme
+                                                .onPrimaryContainer
+                                                .copy(alpha = 0.75f)
+                                    )
 
-                                   Spacer(
-                                       modifier =
-                                           Modifier.height(2.dp)
-                                   )
+                                    Spacer(
+                                        modifier =
+                                            Modifier.height(2.dp)
+                                    )
 
-                                   Text(
-                                       text = "—",
-                                       fontSize = 16.sp,
-                                       color =
-                                           MaterialTheme.colorScheme
-                                               .onPrimaryContainer
-                                               .copy(alpha = 0.45f)
-                                   )
-                               }
+                                    Text(
+                                        text = "—",
+                                        fontSize = 16.sp,
+                                        color =
+                                            MaterialTheme.colorScheme
+                                                .onPrimaryContainer
+                                                .copy(alpha = 0.45f)
+                                    )
+                                }
 
-                               Column(
-                                   modifier =
-                                       Modifier.weight(1f),
-                                   horizontalAlignment =
-                                       androidx.compose.ui.Alignment
-                                           .End
-                               ) {
+                                Column(
+                                    modifier =
+                                        Modifier.weight(1f),
+                                    horizontalAlignment =
+                                        androidx.compose.ui.Alignment
+                                            .End
+                                ) {
 
-                                   Text(
-                                       text = "Saídas",
-                                       fontSize = 14.sp,
-                                       fontWeight = FontWeight.Medium,
-                                       color =
-                                           MaterialTheme.colorScheme
-                                               .onPrimaryContainer
-                                               .copy(alpha = 0.70f)
-                                   )
+                                    Text(
+                                        text = "Saídas",
+                                        fontSize = 14.sp,
+                                        fontWeight = FontWeight.Medium,
+                                        color =
+                                            MaterialTheme.colorScheme
+                                                .onPrimaryContainer
+                                                .copy(alpha = 0.70f)
+                                    )
 
-                                   Spacer(
-                                       modifier =
-                                           Modifier.height(0.dp)
-                                   )
+                                    Spacer(
+                                        modifier =
+                                            Modifier.height(0.dp)
+                                    )
 
-                                   Text(
-                                       text =
-                                           formatarDinheiro(
-                                               saidasDoMes
-                                           ),
-                                       fontWeight =
-                                           FontWeight.SemiBold,
-                                       fontSize = 16.sp,
-                                       color =
-                                           MaterialTheme.colorScheme
-                                               .onPrimaryContainer
-                                   )
-                               }
-                           }
-                       }
-                   }
+                                    Text(
+                                        text =
+                                            formatarDinheiro(
+                                                saidasDoMes
+                                            ),
+                                        fontWeight =
+                                            FontWeight.SemiBold,
+                                        fontSize = 16.sp,
+                                        color =
+                                            MaterialTheme.colorScheme
+                                                .onPrimaryContainer
+                                    )
+                                }
+                            }
+                        }
+                    }
 
-                   Spacer(
-                       modifier = Modifier.height(24.dp)
-                   )
+                    Spacer(
+                        modifier = Modifier.height(24.dp)
+                    )
 
-                   Row(
-                       modifier =
-                           Modifier.fillMaxWidth(),
+                    Row(
+                        modifier =
+                            Modifier.fillMaxWidth(),
 
-                       horizontalArrangement =
-                           Arrangement.SpaceBetween,
+                        horizontalArrangement =
+                            Arrangement.SpaceBetween,
 
-                       verticalAlignment =
-                           androidx.compose.ui.Alignment.CenterVertically
-                   ) {
+                        verticalAlignment =
+                            androidx.compose.ui.Alignment.CenterVertically
+                    ) {
 
-                       Text(
-                           text = "Contas",
-                           fontSize = 22.sp,
-                           fontWeight = FontWeight.Bold,
-                           color =
-                               MaterialTheme.colorScheme.onBackground
-                       )
+                        Text(
+                            text = "Contas",
+                            fontSize = 22.sp,
+                            fontWeight = FontWeight.Bold,
+                            color =
+                                MaterialTheme.colorScheme.onBackground
+                        )
 
-                       Text(
-                           text = "Ver todas",
-                           fontSize = 14.sp,
-                           fontWeight = FontWeight.Medium,
-                           color =
-                               MaterialTheme.colorScheme.primary,
+                        Text(
+                            text = "Ver todas",
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Medium,
+                            color =
+                                MaterialTheme.colorScheme.primary,
 
-                           modifier =
-                               Modifier.clickable {
-                                   onContas()
-                               }
-                       )
-                   }
+                            modifier =
+                                Modifier.clickable {
+                                    onContas()
+                                }
+                        )
+                    }
 
-                   Spacer(
-                       modifier =
-                           Modifier.height(10.dp)
-                   )
-               }
+                    Spacer(
+                        modifier =
+                            Modifier.height(10.dp)
+                    )
+                }
 
                 if (contas.isEmpty()) {
                     item {
@@ -3563,108 +4393,108 @@ fun TelaInicial(
                     )
                 }
 
-               if (faturasAtuais.isEmpty()) {
+                if (faturasAtuais.isEmpty()) {
 
-                   item {
+                    item {
 
-                       Card(
-                           modifier =
-                               Modifier
-                                   .fillMaxWidth()
-                                   .clickable {
-                                       onFaturas()
-                                   },
+                        Card(
+                            modifier =
+                                Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        onFaturas()
+                                    },
 
-                           shape =
-                               androidx.compose.foundation.shape
-                                   .RoundedCornerShape(18.dp),
+                            shape =
+                                androidx.compose.foundation.shape
+                                    .RoundedCornerShape(18.dp),
 
-                           colors =
-                               androidx.compose.material3.CardDefaults
-                                   .cardColors(
-                                       containerColor =
-                                           MaterialTheme.colorScheme.surface
-                                   ),
+                            colors =
+                                androidx.compose.material3.CardDefaults
+                                    .cardColors(
+                                        containerColor =
+                                            MaterialTheme.colorScheme.surface
+                                    ),
 
-                           elevation =
-                               androidx.compose.material3.CardDefaults
-                                   .cardElevation(
-                                       defaultElevation = 1.dp
-                                   )
-                       ) {
+                            elevation =
+                                androidx.compose.material3.CardDefaults
+                                    .cardElevation(
+                                        defaultElevation = 1.dp
+                                    )
+                        ) {
 
-                           Column(
-                               modifier =
-                                   Modifier
-                                       .fillMaxWidth()
-                                       .padding(
-                                           horizontal = 18.dp,
-                                           vertical = 20.dp
-                                       ),
+                            Column(
+                                modifier =
+                                    Modifier
+                                        .fillMaxWidth()
+                                        .padding(
+                                            horizontal = 18.dp,
+                                            vertical = 20.dp
+                                        ),
 
-                               horizontalAlignment =
-                                   androidx.compose.ui.Alignment.CenterHorizontally
-                           ) {
+                                horizontalAlignment =
+                                    androidx.compose.ui.Alignment.CenterHorizontally
+                            ) {
 
-                               Text(
-                                   text = "Nenhuma fatura neste mês",
+                                Text(
+                                    text = "Nenhuma fatura neste mês",
 
-                                   fontSize = 16.sp,
+                                    fontSize = 16.sp,
 
-                                   fontWeight =
-                                       FontWeight.SemiBold,
+                                    fontWeight =
+                                        FontWeight.SemiBold,
 
-                                   textAlign =
-                                       TextAlign.Center,
+                                    textAlign =
+                                        TextAlign.Center,
 
-                                   color =
-                                       MaterialTheme.colorScheme.onSurface
-                               )
-
-
-                               Spacer(
-                                   modifier =
-                                       Modifier.height(5.dp)
-                               )
+                                    color =
+                                        MaterialTheme.colorScheme.onSurface
+                                )
 
 
-                               Text(
-                                   text =
-                                       "Não há compras no crédito " +
-                                               "para o período atual.",
-
-                                   fontSize = 13.sp,
-
-                                   textAlign =
-                                       TextAlign.Center,
-
-                                   color =
-                                       MaterialTheme.colorScheme
-                                           .onSurfaceVariant
-                               )
+                                Spacer(
+                                    modifier =
+                                        Modifier.height(5.dp)
+                                )
 
 
-                               Spacer(
-                                   modifier =
-                                       Modifier.height(12.dp)
-                               )
+                                Text(
+                                    text =
+                                        "Não há compras no crédito " +
+                                                "para o período atual.",
+
+                                    fontSize = 13.sp,
+
+                                    textAlign =
+                                        TextAlign.Center,
+
+                                    color =
+                                        MaterialTheme.colorScheme
+                                            .onSurfaceVariant
+                                )
 
 
-                               Text(
-                                   text = "Ver faturas",
+                                Spacer(
+                                    modifier =
+                                        Modifier.height(12.dp)
+                                )
 
-                                   fontSize = 13.sp,
 
-                                   fontWeight =
-                                       FontWeight.SemiBold,
+                                Text(
+                                    text = "Ver faturas",
 
-                                   color =
-                                       MaterialTheme.colorScheme.primary
-                               )
-                           }
-                       }
-                   }
-               }else {
+                                    fontSize = 13.sp,
+
+                                    fontWeight =
+                                        FontWeight.SemiBold,
+
+                                    color =
+                                        MaterialTheme.colorScheme.primary
+                                )
+                            }
+                        }
+                    }
+                }else {
                     items(
                         items = faturasAtuais
                     ) { fatura ->
@@ -3891,11 +4721,11 @@ fun TelaInicial(
                     }
                 }
 
-               item {
-                   Spacer(
-                       modifier = Modifier.height(20.dp)
-                   )
-               }
+                item {
+                    Spacer(
+                        modifier = Modifier.height(20.dp)
+                    )
+                }
             }
         }
     }
@@ -5491,8 +6321,8 @@ fun TelaContas(
                     }
                 }
             }
-            }
         }
+    }
 
     // =====================================================
 // NOVA CONTA
@@ -5816,39 +6646,39 @@ fun TelaContas(
                 }
             }
         )}
-        if (mensagemExclusao.isNotBlank()) {
-            AlertDialog(
-                onDismissRequest = {
-                    mensagemExclusao = ""
-                },
-                title = {
-                    Text(
-                        text =
-                            if (
-                                mensagemExclusao.startsWith("Conta excluída")
-                            ) {
-                                "Conta excluída"
-                            } else {
-                                "Não é possível excluir"
-                            }
-                    )
-                },
-                text = {
-                    Text(
-                        text = mensagemExclusao
-                    )
-                },
-                confirmButton = {
-                    TextButton(
-                        onClick = {
-                            mensagemExclusao = ""
+    if (mensagemExclusao.isNotBlank()) {
+        AlertDialog(
+            onDismissRequest = {
+                mensagemExclusao = ""
+            },
+            title = {
+                Text(
+                    text =
+                        if (
+                            mensagemExclusao.startsWith("Conta excluída")
+                        ) {
+                            "Conta excluída"
+                        } else {
+                            "Não é possível excluir"
                         }
-                    ) {
-                        Text("OK")
+                )
+            },
+            text = {
+                Text(
+                    text = mensagemExclusao
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        mensagemExclusao = ""
                     }
+                ) {
+                    Text("OK")
                 }
-            )
-        }
+            }
+        )
+    }
     contaParaEditar?.let { conta ->
 
         AlertDialog(
@@ -5971,23 +6801,23 @@ fun TelaCartoes(
     cartoes: List<CartaoComConta>,
     contas: List<ContaEntity>,
     onAdicionar: (
-            String,
-            Double,
-            Int,
-            Int,
-            Int,
-            (Boolean) -> Unit
+        String,
+        Double,
+        Int,
+        Int,
+        Int,
+        (Boolean) -> Unit
     ) -> Unit,
 
     onEditar: (
-            CartaoComConta,
-            String,
-            Double,
-            Int,
-            Int,
-            Int,
-            (Boolean) -> Unit
-            ) -> Unit,
+        CartaoComConta,
+        String,
+        Double,
+        Int,
+        Int,
+        Int,
+        (Boolean) -> Unit
+    ) -> Unit,
 
     onExcluir: (
         CartaoComConta,
@@ -6353,7 +7183,7 @@ fun TelaCartoes(
                             }
                         }
                     }
-                    }
+                }
 
             }
         }
@@ -9095,7 +9925,7 @@ fun TelaFaturas(
         parcelas.filter { parcela ->
 
             parcela.mesFatura == mesSelecionado &&
-            parcela.anoFatura == anoSelecionado
+                    parcela.anoFatura == anoSelecionado
         }
 
 
@@ -9392,7 +10222,7 @@ fun TelaFaturas(
                         primeiraParcela.cartaoId
 
                     val cartao =
-                            cartoes.find { item -> item.id == cartaoId }
+                        cartoes.find { item -> item.id == cartaoId }
 
                     val parcelasEmAberto =
                         parcelasCartao.filter { parcela ->
@@ -9402,8 +10232,8 @@ fun TelaFaturas(
                     val pagamentosDoCartao =
                         pagamentos.filter { pagamento ->
                             pagamento.cartaoId == cartaoId &&
-                            pagamento.mesFatura == mesSelecionado &&
-                            pagamento.anoFatura == anoSelecionado
+                                    pagamento.mesFatura == mesSelecionado &&
+                                    pagamento.anoFatura == anoSelecionado
                         }
 
                     val totalFatura =
@@ -11150,10 +11980,10 @@ fun criarDataFatura(
 }
 
 fun calcularVencimentoFatura(
-        mesFatura: Int,
-        anoFatura: Int,
-        diaFechamento: Int,
-        diaVencimento: Int
+    mesFatura: Int,
+    anoFatura: Int,
+    diaFechamento: Int,
+    diaVencimento: Int
 ): java.util.Calendar {
     var mesVencimento = mesFatura
     var anoVencimento = anoFatura
