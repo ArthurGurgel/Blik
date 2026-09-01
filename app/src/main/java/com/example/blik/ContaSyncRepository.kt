@@ -40,38 +40,108 @@ object ContaSyncRepository {
         contaDao: ContaDao
     ): Int {
 
-        // Neste primeiro estágio, o download automático
-        // só acontece em um banco local realmente vazio.
-        if (contaDao.quantidade() > 0) {
-            return 0
-        }
-
         val contasRemotas =
             ContaRemotaRepository.listar()
+
 
         if (contasRemotas.isEmpty()) {
             return 0
         }
 
-        val contasLocais =
-            contasRemotas.map { contaRemota ->
 
-                ContaEntity(
-                    nome = contaRemota.nome,
-                    saldoInicial = contaRemota.saldoInicial,
-                    ativa = contaRemota.ativa,
+        var quantidadeAlterada = 0
 
-                    // Fundamental:
-                    // mantém no Room o mesmo UUID do Supabase.
-                    syncId = contaRemota.id
+
+        contasRemotas.forEach { contaRemota ->
+
+            val contaLocal =
+                contaDao.buscarPorSyncId(
+                    syncId =
+                        contaRemota.id
                 )
+
+
+            if (contaLocal == null) {
+
+                // =============================================
+                // CONTA EXISTE NA NUVEM,
+                // MAS AINDA NÃO EXISTE NESTE APARELHO
+                // =============================================
+
+                val resultado =
+                    contaDao.inserir(
+                        ContaEntity(
+                            nome =
+                                contaRemota.nome,
+
+                            saldoInicial =
+                                contaRemota.saldoInicial,
+
+                            ativa =
+                                contaRemota.ativa,
+
+                            syncId =
+                                contaRemota.id
+                        )
+                    )
+
+
+                if (resultado == -1L) {
+
+                    throw IllegalStateException(
+                        "Não foi possível importar a conta \"${contaRemota.nome}\"."
+                    )
+                }
+
+
+                quantidadeAlterada++
+
+            } else {
+
+                // =============================================
+                // CONTA JÁ EXISTE LOCALMENTE.
+                // VERIFICA SE A NUVEM TEM DADOS DIFERENTES.
+                // =============================================
+
+                val precisaAtualizar =
+                    contaLocal.nome !=
+                            contaRemota.nome ||
+
+                            contaLocal.saldoInicial !=
+                            contaRemota.saldoInicial ||
+
+                            contaLocal.ativa !=
+                            contaRemota.ativa
+
+
+                if (precisaAtualizar) {
+
+                    val linhasAtualizadas =
+                        contaDao.atualizarDaNuvem(
+                            syncId =
+                                contaRemota.id,
+
+                            nome =
+                                contaRemota.nome,
+
+                            saldoInicial =
+                                contaRemota.saldoInicial,
+
+                            ativa =
+                                contaRemota.ativa
+                        )
+
+
+                    if (linhasAtualizadas > 0) {
+
+                        quantidadeAlterada++
+                    }
+                }
             }
+        }
 
-        contaDao.inserirTodas(
-            contasLocais
-        )
 
-        return contasLocais.size
+        return quantidadeAlterada
     }
 
     suspend fun excluir(

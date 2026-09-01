@@ -151,7 +151,44 @@ interface ContaDao {
     """
     )
     suspend fun listarTodasUmaVez(): List<ContaEntity>
+    @Query(
+        """
+    SELECT *
+    FROM contas
+    WHERE syncId = :syncId
+    LIMIT 1
+    """
+    )
+    suspend fun buscarPorSyncId(
+        syncId: String
+    ): ContaEntity?
 
+
+    @Query(
+        """
+    UPDATE contas
+    SET nome = :nome,
+        saldoInicial = :saldoInicial,
+        ativa = :ativa
+    WHERE syncId = :syncId
+    """
+    )
+    suspend fun atualizarDaNuvem(
+        syncId: String,
+        nome: String,
+        saldoInicial: Double,
+        ativa: Boolean
+    ): Int
+
+    @Query(
+        """
+    DELETE FROM contas
+    WHERE syncId = :syncId
+    """
+    )
+    suspend fun excluirPorSyncId(
+        syncId: String
+    ): Int
 
 }
 

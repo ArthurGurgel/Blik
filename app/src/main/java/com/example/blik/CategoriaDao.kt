@@ -111,4 +111,39 @@ interface CategoriaDao {
     """
     )
     suspend fun listarTodasUmaVez(): List<CategoriaEntity>
+
+    @Query(
+        """
+    SELECT *
+    FROM categorias
+    WHERE syncId = :syncId
+    LIMIT 1
+    """
+    )
+    suspend fun buscarPorSyncId(
+        syncId: String
+    ): CategoriaEntity?
+
+
+    @Query(
+        """
+    UPDATE categorias
+    SET nome = :nome
+    WHERE syncId = :syncId
+    """
+    )
+    suspend fun atualizarDaNuvem(
+        syncId: String,
+        nome: String
+    ): Int
+
+    @Query(
+        """
+    DELETE FROM categorias
+    WHERE syncId = :syncId
+    """
+    )
+    suspend fun excluirPorSyncId(
+        syncId: String
+    ): Int
 }

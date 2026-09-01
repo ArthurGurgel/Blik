@@ -150,4 +150,26 @@ interface MovimentacaoDao {
     """
     )
     suspend fun listarTodasUmaVez(): List<MovimentacaoEntity>
+
+    @Query(
+        """
+    SELECT *
+    FROM movimentacoes
+    WHERE syncId = :syncId
+    LIMIT 1
+    """
+    )
+    suspend fun buscarPorSyncId(
+        syncId: String
+    ): MovimentacaoEntity?
+
+    @Query(
+        """
+    DELETE FROM movimentacoes
+    WHERE syncId = :syncId
+    """
+    )
+    suspend fun excluirPorSyncId(
+        syncId: String
+    ): Int
 }

@@ -117,4 +117,26 @@ interface CartaoDao {
     """
     )
     suspend fun listarTodosUmaVez(): List<CartaoEntity>
+
+    @Query(
+        """
+    SELECT *
+    FROM cartoes
+    WHERE syncId = :syncId
+    LIMIT 1
+    """
+    )
+    suspend fun buscarPorSyncId(
+        syncId: String
+    ): CartaoEntity?
+
+    @Query(
+        """
+    DELETE FROM cartoes
+    WHERE syncId = :syncId
+    """
+    )
+    suspend fun excluirPorSyncId(
+        syncId: String
+    ): Int
 }

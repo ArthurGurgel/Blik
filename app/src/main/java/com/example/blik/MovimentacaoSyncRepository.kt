@@ -137,12 +137,9 @@ object MovimentacaoSyncRepository {
         cartaoDao: CartaoDao
     ): Int {
 
-        if (movimentacaoDao.listarTodasUmaVez().isNotEmpty()) {
-            return 0
-        }
-
         val movimentacoesRemotas =
             MovimentacaoRemotaRepository.listar()
+
 
         if (movimentacoesRemotas.isEmpty()) {
             return 0
@@ -159,6 +156,9 @@ object MovimentacaoSyncRepository {
             cartaoDao.listarTodosUmaVez()
 
 
+        var quantidadeAlterada = 0
+
+
         movimentacoesRemotas.forEach { movimentacaoRemota ->
 
             val contaLocalId =
@@ -166,7 +166,8 @@ object MovimentacaoSyncRepository {
 
                     contasLocais
                         .firstOrNull { conta ->
-                            conta.syncId == contaRemotaId
+                            conta.syncId ==
+                                    contaRemotaId
                         }
                         ?.id
                         ?: throw IllegalStateException(
@@ -182,7 +183,8 @@ object MovimentacaoSyncRepository {
 
                     contasLocais
                         .firstOrNull { conta ->
-                            conta.syncId == contaRemotaId
+                            conta.syncId ==
+                                    contaRemotaId
                         }
                         ?.id
                         ?: throw IllegalStateException(
@@ -198,69 +200,173 @@ object MovimentacaoSyncRepository {
 
                     categoriasLocais
                         .firstOrNull { categoria ->
-                            categoria.syncId == categoriaRemotaId
+                            categoria.syncId ==
+                                    categoriaRemotaId
                         }
                         ?.id
                         ?: throw IllegalStateException(
-                            "OUTROS LOCAL: ${
-                                categoriasLocais
-                                    .firstOrNull { it.nome == "Outros" }
-                                    ?.syncId
-                                    ?: "NAO EXISTE"
-                            }"
+                            "Categoria da movimentação " +
+                                    "\"${movimentacaoRemota.descricao}\" " +
+                                    "não encontrada."
                         )
                 }
+
 
             val cartaoLocalId =
                 movimentacaoRemota.cartaoId?.let { cartaoRemotoId ->
 
                     cartoesLocais
                         .firstOrNull { cartao ->
-                            cartao.syncId == cartaoRemotoId
+                            cartao.syncId ==
+                                    cartaoRemotoId
                         }
                         ?.id
                         ?: throw IllegalStateException(
-                            "OUTROS LOCAL: ${
-                                categoriasLocais
-                                    .firstOrNull { it.nome == "Outros" }
-                                    ?.syncId
-                                    ?: "NAO EXISTE"
-                            }"
+                            "Cartão da movimentação " +
+                                    "\"${movimentacaoRemota.descricao}\" " +
+                                    "não encontrado."
                         )
                 }
 
 
             val dataLocal =
                 LocalDate
-                    .parse(movimentacaoRemota.data)
-                    .format(formatoLocal)
+                    .parse(
+                        movimentacaoRemota.data
+                    )
+                    .format(
+                        formatoLocal
+                    )
 
 
-            movimentacaoDao.inserir(
-                MovimentacaoEntity(
-                    descricao = movimentacaoRemota.descricao,
-                    valor = movimentacaoRemota.valor,
-                    tipo = movimentacaoRemota.tipo,
-                    formaPagamento = movimentacaoRemota.formaPagamento,
-
-                    contaId = contaLocalId,
-                    contaDestinoId = contaDestinoLocalId,
-                    categoriaId = categoriaLocalId,
-                    cartaoId = cartaoLocalId,
-
-                    quantidadeParcelas =
-                        movimentacaoRemota.quantidadeParcelas,
-
-                    data = dataLocal,
-
-                    // preserva o mesmo UUID da nuvem
-                    syncId = movimentacaoRemota.id
+            val movimentacaoLocal =
+                movimentacaoDao.buscarPorSyncId(
+                    syncId =
+                        movimentacaoRemota.id
                 )
-            )
+
+
+            if (movimentacaoLocal == null) {
+
+                movimentacaoDao.inserir(
+                    MovimentacaoEntity(
+                        descricao =
+                            movimentacaoRemota.descricao,
+
+                        valor =
+                            movimentacaoRemota.valor,
+
+                        tipo =
+                            movimentacaoRemota.tipo,
+
+                        formaPagamento =
+                            movimentacaoRemota.formaPagamento,
+
+                        contaId =
+                            contaLocalId,
+
+                        contaDestinoId =
+                            contaDestinoLocalId,
+
+                        categoriaId =
+                            categoriaLocalId,
+
+                        cartaoId =
+                            cartaoLocalId,
+
+                        quantidadeParcelas =
+                            movimentacaoRemota.quantidadeParcelas,
+
+                        data =
+                            dataLocal,
+
+                        syncId =
+                            movimentacaoRemota.id
+                    )
+                )
+
+
+                quantidadeAlterada++
+
+            } else {
+
+                val precisaAtualizar =
+                    movimentacaoLocal.descricao !=
+                            movimentacaoRemota.descricao ||
+
+                            movimentacaoLocal.valor !=
+                            movimentacaoRemota.valor ||
+
+                            movimentacaoLocal.tipo !=
+                            movimentacaoRemota.tipo ||
+
+                            movimentacaoLocal.formaPagamento !=
+                            movimentacaoRemota.formaPagamento ||
+
+                            movimentacaoLocal.contaId !=
+                            contaLocalId ||
+
+                            movimentacaoLocal.contaDestinoId !=
+                            contaDestinoLocalId ||
+
+                            movimentacaoLocal.categoriaId !=
+                            categoriaLocalId ||
+
+                            movimentacaoLocal.cartaoId !=
+                            cartaoLocalId ||
+
+                            movimentacaoLocal.quantidadeParcelas !=
+                            movimentacaoRemota.quantidadeParcelas ||
+
+                            movimentacaoLocal.data !=
+                            dataLocal
+
+
+                if (precisaAtualizar) {
+
+                    movimentacaoDao.editar(
+                        id =
+                            movimentacaoLocal.id,
+
+                        descricao =
+                            movimentacaoRemota.descricao,
+
+                        valor =
+                            movimentacaoRemota.valor,
+
+                        tipo =
+                            movimentacaoRemota.tipo,
+
+                        formaPagamento =
+                            movimentacaoRemota.formaPagamento,
+
+                        contaId =
+                            contaLocalId,
+
+                        contaDestinoId =
+                            contaDestinoLocalId,
+
+                        categoriaId =
+                            categoriaLocalId,
+
+                        cartaoId =
+                            cartaoLocalId,
+
+                        quantidadeParcelas =
+                            movimentacaoRemota.quantidadeParcelas,
+
+                        data =
+                            dataLocal
+                    )
+
+
+                    quantidadeAlterada++
+                }
+            }
         }
 
 
-        return movimentacoesRemotas.size
+        return quantidadeAlterada
     }
 
     suspend fun excluir(

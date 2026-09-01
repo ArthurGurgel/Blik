@@ -35,58 +35,86 @@ object CategoriaSyncRepository {
         categoriaDao: CategoriaDao
     ): Int {
 
-        if (categoriaDao.quantidade() > 0) {
-            return 0
-        }
-
         val categoriasRemotas =
             CategoriaRemotaRepository.listar()
 
-        val categoriaOutrosRemota =
-            categoriasRemotas
-                .firstOrNull { categoria ->
-                    categoria.id ==
-                            "81d1679a-816a-4050-bfc0-d147731c1eba"
-                }
-
-        if (categoriaOutrosRemota == null) {
-            throw IllegalStateException(
-                "OUTROS NAO VEIO DO SUPABASE. TOTAL: ${categoriasRemotas.size}"
-            )
-        }
 
         if (categoriasRemotas.isEmpty()) {
             return 0
         }
 
-        val categoriasLocais =
-            categoriasRemotas.map { categoriaRemota ->
 
-                CategoriaEntity(
-                    nome = categoriaRemota.nome,
-                    syncId = categoriaRemota.id
+        var quantidadeAlterada = 0
+
+
+        categoriasRemotas.forEach { categoriaRemota ->
+
+            val categoriaLocal =
+                categoriaDao.buscarPorSyncId(
+                    syncId =
+                        categoriaRemota.id
                 )
-            }
 
-        categoriaDao.inserirTodas(
-            categoriasLocais
-        )
 
-        val categoriaOutrosLocal =
-            categoriaDao
-                .listarTodasUmaVez()
-                .firstOrNull { categoria ->
-                    categoria.syncId ==
-                            "81d1679a-816a-4050-bfc0-d147731c1eba"
+            if (categoriaLocal == null) {
+
+                // =============================================
+                // EXISTE NA NUVEM, MAS NÃO NESTE APARELHO
+                // =============================================
+
+                val resultado =
+                    categoriaDao.inserir(
+                        CategoriaEntity(
+                            nome =
+                                categoriaRemota.nome,
+
+                            syncId =
+                                categoriaRemota.id
+                        )
+                    )
+
+
+                if (resultado == -1L) {
+
+                    throw IllegalStateException(
+                        "Não foi possível importar a categoria \"${categoriaRemota.nome}\"."
+                    )
                 }
 
-        if (categoriaOutrosLocal == null) {
-            throw IllegalStateException(
-                "OUTROS VEIO DO SUPABASE MAS NAO ENTROU NO ROOM"
-            )
+
+                quantidadeAlterada++
+
+            } else {
+
+                // =============================================
+                // JÁ EXISTE LOCALMENTE.
+                // VERIFICA SE O NOME MUDOU NA NUVEM
+                // =============================================
+
+                if (
+                    categoriaLocal.nome !=
+                    categoriaRemota.nome
+                ) {
+
+                    val linhasAtualizadas =
+                        categoriaDao.atualizarDaNuvem(
+                            syncId =
+                                categoriaRemota.id,
+
+                            nome =
+                                categoriaRemota.nome
+                        )
+
+
+                    if (linhasAtualizadas > 0) {
+                        quantidadeAlterada++
+                    }
+                }
+            }
         }
 
-        return categoriasLocais.size
+
+        return quantidadeAlterada
     }
 
     suspend fun excluir(

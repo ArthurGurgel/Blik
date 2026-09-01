@@ -32,6 +32,25 @@ object AuthRepository {
         }
     }
 
+    suspend fun recuperarSenha(
+        email: String
+    ) {
+
+        auth.resetPasswordForEmail(
+            email = email.trim(),
+            redirectUrl = "blik://auth/recovery"
+        )
+    }
+
+    suspend fun atualizarSenha(
+        novaSenha: String
+    ) {
+
+        auth.updateUser {
+            password = novaSenha
+        }
+    }
+
     suspend fun sair() {
         auth.signOut()
     }

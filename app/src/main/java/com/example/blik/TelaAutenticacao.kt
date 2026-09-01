@@ -34,14 +34,20 @@ import androidx.compose.ui.unit.sp
 fun TelaAutenticacao(
     carregando: Boolean = false,
     mensagemErro: String? = null,
+
     onEntrar: (
         email: String,
         senha: String
     ) -> Unit,
+
     onCadastrar: (
         email: String,
         senha: String
-    ) -> Unit
+    ) -> Unit,
+
+    onRecuperarSenha: (
+        email: String
+    ) -> Unit = {},
 ) {
 
     var modoCadastro by remember {
@@ -189,6 +195,42 @@ fun TelaAutenticacao(
                 modifier =
                     Modifier.fillMaxWidth()
             )
+            if (!modoCadastro) {
+
+                TextButton(
+                    enabled = !carregando,
+
+                    onClick = {
+
+                        val emailLimpo =
+                            email.trim()
+
+                        if (emailLimpo.isBlank()) {
+
+                            erroLocal =
+                                "Informe seu e-mail para recuperar a senha."
+
+                        } else {
+
+                            erroLocal = null
+
+                            onRecuperarSenha(
+                                emailLimpo
+                            )
+                        }
+                    },
+
+                    modifier =
+                        Modifier.align(
+                            Alignment.End
+                        )
+                ) {
+
+                    Text(
+                        "Esqueci minha senha"
+                    )
+                }
+            }
 
             if (modoCadastro) {
 

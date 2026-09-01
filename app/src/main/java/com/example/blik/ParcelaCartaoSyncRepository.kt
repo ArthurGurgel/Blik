@@ -132,20 +132,14 @@ object ParcelaCartaoSyncRepository {
         cartaoDao: CartaoDao
     ): Int {
 
-        if (
-            parcelaCartaoDao
-                .listarTodasUmaVez()
-                .isNotEmpty()
-        ) {
-            return 0
-        }
-
         val parcelasRemotas =
             ParcelaCartaoRemotaRepository.listar()
+
 
         if (parcelasRemotas.isEmpty()) {
             return 0
         }
+
 
         val movimentacoesLocais =
             movimentacaoDao.listarTodasUmaVez()
@@ -154,70 +148,147 @@ object ParcelaCartaoSyncRepository {
             cartaoDao.listarTodosUmaVez()
 
 
-        val parcelasLocais =
-            parcelasRemotas.map { parcelaRemota ->
-
-                val movimentacaoLocal =
-                    movimentacoesLocais
-                        .firstOrNull { movimentacao ->
-                            movimentacao.syncId ==
-                                    parcelaRemota.movimentacaoId
-                        }
-                        ?: throw IllegalStateException(
-                            "Movimentação da parcela " +
-                                    "${parcelaRemota.numeroParcela} " +
-                                    "não encontrada."
-                        )
-
-                val cartaoLocal =
-                    cartoesLocais
-                        .firstOrNull { cartao ->
-                            cartao.syncId ==
-                                    parcelaRemota.cartaoId
-                        }
-                        ?: throw IllegalStateException(
-                            "Cartão da parcela " +
-                                    "${parcelaRemota.numeroParcela} " +
-                                    "não encontrado."
-                        )
+        var quantidadeAlterada = 0
 
 
-                ParcelaCartaoEntity(
-                    movimentacaoId =
-                        movimentacaoLocal.id,
+        parcelasRemotas.forEach { parcelaRemota ->
 
-                    cartaoId =
-                        cartaoLocal.id,
+            val movimentacaoLocal =
+                movimentacoesLocais
+                    .firstOrNull { movimentacao ->
+                        movimentacao.syncId ==
+                                parcelaRemota.movimentacaoId
+                    }
+                    ?: throw IllegalStateException(
+                        "Movimentação da parcela " +
+                                "${parcelaRemota.numeroParcela} " +
+                                "não encontrada."
+                    )
 
-                    numeroParcela =
-                        parcelaRemota.numeroParcela,
 
-                    totalParcelas =
-                        parcelaRemota.totalParcelas,
+            val cartaoLocal =
+                cartoesLocais
+                    .firstOrNull { cartao ->
+                        cartao.syncId ==
+                                parcelaRemota.cartaoId
+                    }
+                    ?: throw IllegalStateException(
+                        "Cartão da parcela " +
+                                "${parcelaRemota.numeroParcela} " +
+                                "não encontrado."
+                    )
 
-                    valor =
-                        parcelaRemota.valor,
 
-                    mesFatura =
-                        parcelaRemota.mesFatura,
-
-                    anoFatura =
-                        parcelaRemota.anoFatura,
-
-                    quitadaAnteriormente =
-                        parcelaRemota.quitadaAnteriormente,
-
+            val parcelaLocal =
+                parcelaCartaoDao.buscarPorSyncId(
                     syncId =
                         parcelaRemota.id
                 )
+
+
+            if (parcelaLocal == null) {
+
+                parcelaCartaoDao.inserir(
+                    ParcelaCartaoEntity(
+                        movimentacaoId =
+                            movimentacaoLocal.id,
+
+                        cartaoId =
+                            cartaoLocal.id,
+
+                        numeroParcela =
+                            parcelaRemota.numeroParcela,
+
+                        totalParcelas =
+                            parcelaRemota.totalParcelas,
+
+                        valor =
+                            parcelaRemota.valor,
+
+                        mesFatura =
+                            parcelaRemota.mesFatura,
+
+                        anoFatura =
+                            parcelaRemota.anoFatura,
+
+                        quitadaAnteriormente =
+                            parcelaRemota.quitadaAnteriormente,
+
+                        syncId =
+                            parcelaRemota.id
+                    )
+                )
+
+
+                quantidadeAlterada++
+
+            } else {
+
+                val precisaAtualizar =
+                    parcelaLocal.movimentacaoId !=
+                            movimentacaoLocal.id ||
+
+                            parcelaLocal.cartaoId !=
+                            cartaoLocal.id ||
+
+                            parcelaLocal.numeroParcela !=
+                            parcelaRemota.numeroParcela ||
+
+                            parcelaLocal.totalParcelas !=
+                            parcelaRemota.totalParcelas ||
+
+                            parcelaLocal.valor !=
+                            parcelaRemota.valor ||
+
+                            parcelaLocal.mesFatura !=
+                            parcelaRemota.mesFatura ||
+
+                            parcelaLocal.anoFatura !=
+                            parcelaRemota.anoFatura ||
+
+                            parcelaLocal.quitadaAnteriormente !=
+                            parcelaRemota.quitadaAnteriormente
+
+
+                if (precisaAtualizar) {
+
+                    parcelaCartaoDao.atualizarDaNuvem(
+                        id =
+                            parcelaLocal.id,
+
+                        movimentacaoId =
+                            movimentacaoLocal.id,
+
+                        cartaoId =
+                            cartaoLocal.id,
+
+                        numeroParcela =
+                            parcelaRemota.numeroParcela,
+
+                        totalParcelas =
+                            parcelaRemota.totalParcelas,
+
+                        valor =
+                            parcelaRemota.valor,
+
+                        mesFatura =
+                            parcelaRemota.mesFatura,
+
+                        anoFatura =
+                            parcelaRemota.anoFatura,
+
+                        quitadaAnteriormente =
+                            parcelaRemota.quitadaAnteriormente
+                    )
+
+
+                    quantidadeAlterada++
+                }
             }
+        }
 
 
-        parcelaCartaoDao.inserirTodas(
-            parcelasLocais
-        )
-
-        return parcelasLocais.size
+        return quantidadeAlterada
     }
 
     suspend fun excluir(

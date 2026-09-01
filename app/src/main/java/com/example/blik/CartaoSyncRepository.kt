@@ -66,34 +66,28 @@ object CartaoSyncRepository {
         contaDao: ContaDao
     ): Int {
 
-        // Só faz a carga inicial em um banco local
-        // que ainda não possui cartões.
-        if (cartaoDao.listarTodosUmaVez().isNotEmpty()) {
-            return 0
-        }
-
         val cartoesRemotos =
             CartaoRemotoRepository.listar()
 
-        if (cartoesRemotos.isEmpty()) {
-            throw IllegalStateException(
-                "O Supabase retornou 0 cartões."
-            )
-        }
 
         if (cartoesRemotos.isEmpty()) {
             return 0
         }
 
+
         val contasLocais =
             contaDao.listarTodasUmaVez()
+
+
+        var quantidadeAlterada = 0
 
 
         cartoesRemotos.forEach { cartaoRemoto ->
 
             val contaLocal =
                 contasLocais.firstOrNull { conta ->
-                    conta.syncId == cartaoRemoto.contaId
+                    conta.syncId ==
+                            cartaoRemoto.contaId
                 }
                     ?: throw IllegalStateException(
                         "Não foi encontrada a conta local " +
@@ -101,24 +95,98 @@ object CartaoSyncRepository {
                     )
 
 
-            cartaoDao.inserir(
-                CartaoEntity(
-                    nome = cartaoRemoto.nome,
-                    limite = cartaoRemoto.limite,
-                    diaFechamento = cartaoRemoto.diaFechamento,
-                    diaVencimento = cartaoRemoto.diaVencimento,
-
-                    // UUID remoto da conta virou
-                    // o Int local correspondente.
-                    contaId = contaLocal.id,
-
-                    // Mantém o mesmo UUID do cartão.
-                    syncId = cartaoRemoto.id
+            val cartaoLocal =
+                cartaoDao.buscarPorSyncId(
+                    syncId =
+                        cartaoRemoto.id
                 )
-            )
+
+
+            if (cartaoLocal == null) {
+
+                val resultado =
+                    cartaoDao.inserir(
+                        CartaoEntity(
+                            nome =
+                                cartaoRemoto.nome,
+
+                            limite =
+                                cartaoRemoto.limite,
+
+                            diaFechamento =
+                                cartaoRemoto.diaFechamento,
+
+                            diaVencimento =
+                                cartaoRemoto.diaVencimento,
+
+                            contaId =
+                                contaLocal.id,
+
+                            syncId =
+                                cartaoRemoto.id
+                        )
+                    )
+
+
+                if (resultado == -1L) {
+                    throw IllegalStateException(
+                        "Não foi possível importar o cartão " +
+                                "\"${cartaoRemoto.nome}\"."
+                    )
+                }
+
+
+                quantidadeAlterada++
+
+            } else {
+
+                val precisaAtualizar =
+                    cartaoLocal.nome !=
+                            cartaoRemoto.nome ||
+
+                            cartaoLocal.limite !=
+                            cartaoRemoto.limite ||
+
+                            cartaoLocal.diaFechamento !=
+                            cartaoRemoto.diaFechamento ||
+
+                            cartaoLocal.diaVencimento !=
+                            cartaoRemoto.diaVencimento ||
+
+                            cartaoLocal.contaId !=
+                            contaLocal.id
+
+
+                if (precisaAtualizar) {
+
+                    cartaoDao.editar(
+                        id =
+                            cartaoLocal.id,
+
+                        nome =
+                            cartaoRemoto.nome,
+
+                        limite =
+                            cartaoRemoto.limite,
+
+                        diaFechamento =
+                            cartaoRemoto.diaFechamento,
+
+                        diaVencimento =
+                            cartaoRemoto.diaVencimento,
+
+                        contaId =
+                            contaLocal.id
+                    )
+
+
+                    quantidadeAlterada++
+                }
+            }
         }
 
-        return cartoesRemotos.size
+
+        return quantidadeAlterada
     }
 
     suspend fun excluir(

@@ -141,20 +141,14 @@ object PagamentoFaturaSyncRepository {
         cartaoDao: CartaoDao
     ): Int {
 
-        if (
-            pagamentoFaturaDao
-                .listarTodosUmaVez()
-                .isNotEmpty()
-        ) {
-            return 0
-        }
-
         val pagamentosRemotos =
             PagamentoFaturaRemotoRepository.listar()
+
 
         if (pagamentosRemotos.isEmpty()) {
             return 0
         }
+
 
         val contasLocais =
             contaDao.listarTodasUmaVez()
@@ -163,74 +157,135 @@ object PagamentoFaturaSyncRepository {
             cartaoDao.listarTodosUmaVez()
 
 
-        val pagamentosLocais =
-            pagamentosRemotos.map { pagamentoRemoto ->
-
-                val contaLocal =
-                    contasLocais
-                        .firstOrNull { conta ->
-                            conta.syncId ==
-                                    pagamentoRemoto.contaId
-                        }
-                        ?: throw IllegalStateException(
-                            "Conta do pagamento de fatura não encontrada."
-                        )
-
-                val cartaoLocal =
-                    cartoesLocais
-                        .firstOrNull { cartao ->
-                            cartao.syncId ==
-                                    pagamentoRemoto.cartaoId
-                        }
-                        ?: throw IllegalStateException(
-                            "Cartão do pagamento de fatura não encontrado."
-                        )
+        var quantidadeAlterada = 0
 
 
-                val dataLocal =
-                    LocalDate
-                        .parse(
-                            pagamentoRemoto.dataPagamento
-                        )
-                        .format(
-                            formatoLocal
-                        )
+        pagamentosRemotos.forEach { pagamentoRemoto ->
+
+            val contaLocal =
+                contasLocais
+                    .firstOrNull { conta ->
+                        conta.syncId ==
+                                pagamentoRemoto.contaId
+                    }
+                    ?: throw IllegalStateException(
+                        "Conta do pagamento de fatura não encontrada."
+                    )
 
 
-                PagamentoFaturaEntity(
-                    cartaoId =
-                        cartaoLocal.id,
+            val cartaoLocal =
+                cartoesLocais
+                    .firstOrNull { cartao ->
+                        cartao.syncId ==
+                                pagamentoRemoto.cartaoId
+                    }
+                    ?: throw IllegalStateException(
+                        "Cartão do pagamento de fatura não encontrado."
+                    )
 
-                    contaId =
-                        contaLocal.id,
 
-                    mesFatura =
-                        pagamentoRemoto.mesFatura,
+            val dataLocal =
+                LocalDate
+                    .parse(
+                        pagamentoRemoto.dataPagamento
+                    )
+                    .format(
+                        formatoLocal
+                    )
 
-                    anoFatura =
-                        pagamentoRemoto.anoFatura,
 
-                    valorPago =
-                        pagamentoRemoto.valorPago,
-
-                    dataPagamento =
-                        dataLocal,
-
+            val pagamentoLocal =
+                pagamentoFaturaDao.buscarPorSyncId(
                     syncId =
                         pagamentoRemoto.id
                 )
+
+
+            if (pagamentoLocal == null) {
+
+                pagamentoFaturaDao.inserir(
+                    PagamentoFaturaEntity(
+                        cartaoId =
+                            cartaoLocal.id,
+
+                        contaId =
+                            contaLocal.id,
+
+                        mesFatura =
+                            pagamentoRemoto.mesFatura,
+
+                        anoFatura =
+                            pagamentoRemoto.anoFatura,
+
+                        valorPago =
+                            pagamentoRemoto.valorPago,
+
+                        dataPagamento =
+                            dataLocal,
+
+                        syncId =
+                            pagamentoRemoto.id
+                    )
+                )
+
+
+                quantidadeAlterada++
+
+            } else {
+
+                val precisaAtualizar =
+                    pagamentoLocal.cartaoId !=
+                            cartaoLocal.id ||
+
+                            pagamentoLocal.contaId !=
+                            contaLocal.id ||
+
+                            pagamentoLocal.mesFatura !=
+                            pagamentoRemoto.mesFatura ||
+
+                            pagamentoLocal.anoFatura !=
+                            pagamentoRemoto.anoFatura ||
+
+                            pagamentoLocal.valorPago !=
+                            pagamentoRemoto.valorPago ||
+
+                            pagamentoLocal.dataPagamento !=
+                            dataLocal
+
+
+                if (precisaAtualizar) {
+
+                    pagamentoFaturaDao.atualizarDaNuvem(
+                        id =
+                            pagamentoLocal.id,
+
+                        cartaoId =
+                            cartaoLocal.id,
+
+                        contaId =
+                            contaLocal.id,
+
+                        mesFatura =
+                            pagamentoRemoto.mesFatura,
+
+                        anoFatura =
+                            pagamentoRemoto.anoFatura,
+
+                        valorPago =
+                            pagamentoRemoto.valorPago,
+
+                        dataPagamento =
+                            dataLocal
+                    )
+
+
+                    quantidadeAlterada++
+                }
             }
-
-
-        pagamentosLocais.forEach { pagamento ->
-
-            pagamentoFaturaDao.inserir(
-                pagamento
-            )
         }
 
 
-        return pagamentosLocais.size
+        return quantidadeAlterada
     }
 
     // =============================================

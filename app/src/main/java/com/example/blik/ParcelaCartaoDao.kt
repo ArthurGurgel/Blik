@@ -106,6 +106,62 @@ interface ParcelaCartaoDao {
     """
     )
     suspend fun listarTodasUmaVez(): List<ParcelaCartaoEntity>
+
+    @Insert
+    suspend fun inserir(
+        parcela: ParcelaCartaoEntity
+    ): Long
+
+
+    @Query(
+        """
+    SELECT *
+    FROM parcelas_cartao
+    WHERE syncId = :syncId
+    LIMIT 1
+    """
+    )
+    suspend fun buscarPorSyncId(
+        syncId: String
+    ): ParcelaCartaoEntity?
+
+
+    @Query(
+        """
+    UPDATE parcelas_cartao
+    SET
+        movimentacaoId = :movimentacaoId,
+        cartaoId = :cartaoId,
+        numeroParcela = :numeroParcela,
+        totalParcelas = :totalParcelas,
+        valor = :valor,
+        mesFatura = :mesFatura,
+        anoFatura = :anoFatura,
+        quitadaAnteriormente = :quitadaAnteriormente
+    WHERE id = :id
+    """
+    )
+    suspend fun atualizarDaNuvem(
+        id: Int,
+        movimentacaoId: Int,
+        cartaoId: Int,
+        numeroParcela: Int,
+        totalParcelas: Int,
+        valor: Double,
+        mesFatura: Int,
+        anoFatura: Int,
+        quitadaAnteriormente: Boolean
+    )
+
+    @Query(
+        """
+    DELETE FROM parcelas_cartao
+    WHERE syncId = :syncId
+    """
+    )
+    suspend fun excluirPorSyncId(
+        syncId: String
+    ): Int
 }
 
 

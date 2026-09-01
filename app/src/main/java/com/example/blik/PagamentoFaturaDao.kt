@@ -88,4 +88,50 @@ interface PagamentoFaturaDao {
     """
     )
     suspend fun listarTodosUmaVez(): List<PagamentoFaturaEntity>
+
+    @Query(
+        """
+    SELECT *
+    FROM pagamentos_fatura
+    WHERE syncId = :syncId
+    LIMIT 1
+    """
+    )
+    suspend fun buscarPorSyncId(
+        syncId: String
+    ): PagamentoFaturaEntity?
+
+
+    @Query(
+        """
+    UPDATE pagamentos_fatura
+    SET
+        cartaoId = :cartaoId,
+        contaId = :contaId,
+        mesFatura = :mesFatura,
+        anoFatura = :anoFatura,
+        valorPago = :valorPago,
+        dataPagamento = :dataPagamento
+    WHERE id = :id
+    """
+    )
+    suspend fun atualizarDaNuvem(
+        id: Int,
+        cartaoId: Int,
+        contaId: Int,
+        mesFatura: Int,
+        anoFatura: Int,
+        valorPago: Double,
+        dataPagamento: String
+    )
+
+    @Query(
+        """
+    DELETE FROM pagamentos_fatura
+    WHERE syncId = :syncId
+    """
+    )
+    suspend fun excluirPorSyncId(
+        syncId: String
+    ): Int
 }

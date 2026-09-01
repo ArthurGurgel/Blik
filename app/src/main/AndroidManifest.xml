@@ -1,8 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+
+<manifest
+    xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
-	
-    <uses-permission android:name="android.permission.INTERNET" />
+
+    <uses-permission
+        android:name="android.permission.INTERNET" />
 
     <application
         android:allowBackup="true"
@@ -19,12 +22,42 @@
             android:exported="true"
             android:label="@string/app_name"
             android:theme="@style/Theme.Blik"
-            android:windowSoftInputMode="adjustResize">
+            android:windowSoftInputMode="adjustResize"
+            android:launchMode="singleTop">
 
+            <!-- Inicialização normal do Blik -->
             <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
 
-                <category android:name="android.intent.category.LAUNCHER" />
+                <action
+                    android:name=
+                        "android.intent.action.MAIN" />
+
+                <category
+                    android:name=
+                        "android.intent.category.LAUNCHER" />
+
+            </intent-filter>
+
+
+            <!-- Deep links do Supabase Auth -->
+            <intent-filter>
+
+                <action
+                    android:name=
+                        "android.intent.action.VIEW" />
+
+                <category
+                    android:name=
+                        "android.intent.category.DEFAULT" />
+
+                <category
+                    android:name=
+                        "android.intent.category.BROWSABLE" />
+
+                <data
+                    android:scheme="blik"
+                    android:host="auth" />
+
             </intent-filter>
 
         </activity>

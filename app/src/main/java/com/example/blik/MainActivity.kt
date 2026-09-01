@@ -9,6 +9,7 @@ import com.example.blik.ui.theme.BlikSaida
 import com.example.blik.ui.theme.BlikSaidaContainer
 import android.os.Bundle
 import android.widget.Toast
+import android.content.Intent
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.compose.BackHandler
@@ -91,6 +92,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.auth.status.SessionStatus
+import io.github.jan.supabase.auth.handleDeeplinks
 
 data class Movimentacao(
     val id: Int = 0,
@@ -111,28 +113,297 @@ data class Movimentacao(
 )
 
 data class ResumoFatura(
+    val cartaoId: Int,
     val cartaoNome: String,
+    val mesFatura: Int,
+    val anoFatura: Int,
     val restante: Double,
     val fechamento: java.util.Calendar,
     val vencimento: java.util.Calendar,
-    val status: String
+    val status: String,
+    val limite: Double,
+    val limiteUtilizado: Double
 )
 
-class MainActivity : ComponentActivity() {
 
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
+fun calcularLimiteUtilizadoCartao(
+    cartaoId: Int,
+    parcelasCartao: List<ParcelaCartaoComDetalhes>,
+    pagamentosFatura: List<PagamentoFaturaEntity>
+): Double {
+
+    // Soma tudo que ainda compromete o limite:
+    // faturas atuais + parcelas futuras.
+    val totalParcelasComprometidas =
+        parcelasCartao
+            .filter { parcela ->
+                parcela.cartaoId == cartaoId &&
+                        !parcela.quitadaAnteriormente
+            }
+            .sumOf { parcela ->
+                parcela.valor
+            }
+
+
+    // Cada pagamento de fatura libera aquela parte do limite.
+    val totalPago =
+        pagamentosFatura
+            .filter { pagamento ->
+                pagamento.cartaoId == cartaoId
+            }
+            .sumOf { pagamento ->
+                pagamento.valorPago
+            }
+
+
+    return (
+            totalParcelasComprometidas -
+                    totalPago
+            )
+        .coerceAtLeast(0.0)
+}
+
+
+class MainActivity :
+    ComponentActivity() {
+
+
+    private var modoRecuperacaoSenha
+            by mutableStateOf(false)
+
+
+    override fun onCreate(
+        savedInstanceState: Bundle?
+    ) {
+
+        super.onCreate(
+            savedInstanceState
+        )
+
+
+        tratarDeepLink(
+            intent
+        )
+
 
         setContent {
+
             BlikTheme {
-                BlikApp()
+
+                BlikApp(
+                    modoRecuperacaoSenha =
+                        modoRecuperacaoSenha,
+
+                    onRecuperacaoConcluida = {
+
+                        modoRecuperacaoSenha =
+                            false
+                    }
+                )
             }
+        }
+    }
+
+
+    override fun onNewIntent(
+        intent: Intent
+    ) {
+
+        super.onNewIntent(
+            intent
+        )
+
+
+        setIntent(
+            intent
+        )
+
+
+        tratarDeepLink(
+            intent
+        )
+    }
+
+
+    private fun tratarDeepLink(
+        intent: Intent
+    ) {
+
+        val uri =
+            intent.data
+                ?: return
+
+
+        if (
+            uri.scheme != "blik" ||
+            uri.host != "auth"
+        ) {
+
+            return
+        }
+
+
+        val ehRecuperacao =
+
+            uri.path ==
+                    "/recovery" ||
+
+                    uri.fragment
+                        ?.contains(
+                            "type=recovery",
+                            ignoreCase = true
+                        ) == true
+
+
+        if (ehRecuperacao) {
+
+            modoRecuperacaoSenha =
+                true
+        }
+
+
+        SupabaseProvider.client
+            .handleDeeplinks(
+                intent =
+                    intent,
+
+                onSessionSuccess = {
+
+                    if (
+                        ehRecuperacao
+                    ) {
+
+                        runOnUiThread {
+
+                            modoRecuperacaoSenha =
+                                true
+                        }
+                    }
+                },
+
+                onError = {
+
+                    if (
+                        ehRecuperacao
+                    ) {
+
+                        runOnUiThread {
+
+                            modoRecuperacaoSenha =
+                                false
+
+
+                            Toast.makeText(
+                                this,
+                                "O link de recuperação é inválido ou expirou.",
+                                Toast.LENGTH_LONG
+                            ).show()
+                        }
+                    }
+                }
+            )
+    }
+}
+
+private fun mensagemAmigavelLogin(
+    erro: Exception
+): String {
+
+    val mensagem =
+        erro.message
+            .orEmpty()
+            .lowercase()
+
+
+    return when {
+
+        "invalid login credentials" in mensagem -> {
+            "E-mail ou senha incorretos."
+        }
+
+
+        "email not confirmed" in mensagem -> {
+            "Confirme seu e-mail antes de entrar."
+        }
+
+
+        "too many requests" in mensagem ||
+                "rate limit" in mensagem -> {
+            "Muitas tentativas. Aguarde um pouco e tente novamente."
+        }
+
+
+        "network" in mensagem ||
+                "timeout" in mensagem ||
+                "unable to resolve host" in mensagem ||
+                "failed to connect" in mensagem -> {
+            "Não foi possível conectar. Verifique sua internet."
+        }
+
+
+        else -> {
+            "Não foi possível entrar. Tente novamente."
         }
     }
 }
 
+private fun mensagemAmigavelCadastro(
+    erro: Exception
+): String {
+
+    val mensagem =
+        erro.message
+            .orEmpty()
+            .lowercase()
+
+
+    return when {
+
+        "user already registered" in mensagem ||
+                "already registered" in mensagem -> {
+            "Já existe uma conta cadastrada com este e-mail."
+        }
+
+
+        "password" in mensagem &&
+                (
+                        "short" in mensagem ||
+                                "characters" in mensagem
+                        ) -> {
+            "A senha não atende aos requisitos mínimos."
+        }
+
+
+        "invalid" in mensagem &&
+                "email" in mensagem -> {
+            "Digite um e-mail válido."
+        }
+
+
+        "too many requests" in mensagem ||
+                "rate limit" in mensagem -> {
+            "Muitas tentativas. Aguarde um pouco e tente novamente."
+        }
+
+
+        "network" in mensagem ||
+                "timeout" in mensagem ||
+                "unable to resolve host" in mensagem ||
+                "failed to connect" in mensagem -> {
+            "Não foi possível conectar. Verifique sua internet."
+        }
+
+
+        else -> {
+            "Não foi possível criar a conta. Tente novamente."
+        }
+    }
+}
 @Composable
-fun BlikApp() {
+fun BlikApp(
+    modoRecuperacaoSenha: Boolean = false,
+    onRecuperacaoConcluida: () -> Unit = {}
+) {
 
     val auth =
         SupabaseProvider.client.auth
@@ -152,6 +423,110 @@ fun BlikApp() {
 
     var mensagemErro by remember {
         mutableStateOf<String?>(null)
+    }
+
+    if (
+        modoRecuperacaoSenha
+    ) {
+
+        when (
+            sessionStatus
+        ) {
+
+            is SessionStatus.Authenticated -> {
+
+                TelaNovaSenha(
+                    carregando =
+                        carregando,
+
+                    mensagemErro =
+                        mensagemErro,
+
+                    onSalvar = {
+                            novaSenha ->
+
+
+                        scope.launch {
+
+                            carregando =
+                                true
+
+                            mensagemErro =
+                                null
+
+
+                            try {
+
+                                AuthRepository
+                                    .atualizarSenha(
+                                        novaSenha =
+                                            novaSenha
+                                    )
+
+
+                                // Após alterar a senha,
+                                // encerra a sessão criada
+                                // pelo link de recuperação.
+
+                                try {
+
+                                    AuthRepository
+                                        .sair()
+
+                                } catch (
+                                    _: Exception
+                                ) {
+
+                                    // A senha já foi
+                                    // alterada com sucesso.
+                                }
+
+
+                                onRecuperacaoConcluida()
+
+
+                                Toast.makeText(
+                                    context,
+                                    "Senha alterada com sucesso. Entre novamente.",
+                                    Toast.LENGTH_LONG
+                                ).show()
+
+
+                            } catch (
+                                e: Exception
+                            ) {
+
+                                mensagemErro =
+                                    "Não foi possível alterar a senha. Tente novamente."
+
+                            } finally {
+
+                                carregando =
+                                    false
+                            }
+                        }
+                    }
+                )
+            }
+
+
+            else -> {
+
+                Box(
+                    modifier =
+                        Modifier.fillMaxSize(),
+
+                    contentAlignment =
+                        Alignment.Center
+                ) {
+
+                    CircularProgressIndicator()
+                }
+            }
+        }
+
+
+        return
     }
 
     when (sessionStatus) {
@@ -248,8 +623,40 @@ fun BlikApp() {
                         } catch (e: Exception) {
 
                             mensagemErro =
-                                e.message
-                                    ?: "Não foi possível entrar."
+                                mensagemAmigavelLogin(
+                                    e
+                                )
+                        }
+                        finally {
+
+                            carregando = false
+                        }
+                    }
+                },
+
+                onRecuperarSenha = { email ->
+
+                    scope.launch {
+
+                        carregando = true
+                        mensagemErro = null
+
+                        try {
+
+                            AuthRepository.recuperarSenha(
+                                email = email
+                            )
+
+                            Toast.makeText(
+                                context,
+                                "Se este e-mail estiver cadastrado, você receberá um link para redefinir sua senha.",
+                                Toast.LENGTH_LONG
+                            ).show()
+
+                        } catch (e: Exception) {
+
+                            mensagemErro =
+                                "Não foi possível enviar o e-mail de recuperação. Tente novamente."
 
                         } finally {
 
@@ -286,9 +693,9 @@ fun BlikApp() {
                         } catch (e: Exception) {
 
                             mensagemErro =
-                                e.message
-                                    ?: "Não foi possível criar a conta."
-
+                                mensagemAmigavelCadastro(
+                                    e
+                                )
                         } finally {
 
                             carregando = false
@@ -817,14 +1224,77 @@ fun AppFinanceiro() {
         val usuarioId =
             AuthRepository.usuarioAtualId()
 
+        var exclusoesRemotasConcluidas =
+            false
+
+
+        if (usuarioId != null) {
+
+            try {
+
+                val quantidadeExcluida =
+                    SyncTombstoneRepository
+                        .aplicarNoRoom(
+
+                            contaDao =
+                                contaDao,
+
+                            categoriaDao =
+                                categoriaDao,
+
+                            cartaoDao =
+                                cartaoDao,
+
+                            movimentacaoDao =
+                                dao,
+
+                            parcelaCartaoDao =
+                                parcelaCartaoDao,
+
+                            pagamentoFaturaDao =
+                                pagamentoFaturaDao
+                        )
+
+
+                exclusoesRemotasConcluidas =
+                    true
+
+
+                if (quantidadeExcluida > 0) {
+
+                    Toast.makeText(
+                        context,
+                        "$quantidadeExcluida registro(s) excluído(s) em outro dispositivo.",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
+
+
+            } catch (e: Exception) {
+
+                Toast.makeText(
+                    context,
+                    "Não foi possível verificar exclusões na nuvem. " +
+                            "A sincronização desta abertura foi adiada.",
+                    Toast.LENGTH_LONG
+                ).show()
+            }
+        }
+
+        if (
+            usuarioId == null ||
+            !exclusoesRemotasConcluidas
+        ) {
+            return@LaunchedEffect
+        }
+
 
         var consultaContasNuvemConcluida =
             false
 
 
         if (
-            usuarioId != null &&
-            contaDao.quantidade() == 0
+            usuarioId != null
         ) {
 
             try {
@@ -875,8 +1345,7 @@ fun AppFinanceiro() {
             false
 
         if (
-            usuarioId != null &&
-            categoriaDao.quantidade() == 0
+            usuarioId != null
         ) {
 
             try {
@@ -935,8 +1404,7 @@ fun AppFinanceiro() {
 // =============================================
 
         if (
-            usuarioId != null &&
-            cartaoDao.listarTodosUmaVez().isEmpty()
+            usuarioId != null
         ) {
 
             try {
@@ -973,8 +1441,7 @@ fun AppFinanceiro() {
 // =============================================
 
         if (
-            usuarioId != null &&
-            dao.listarTodasUmaVez().isEmpty()
+            usuarioId != null
         ) {
 
             try {
@@ -1013,10 +1480,7 @@ fun AppFinanceiro() {
 // =============================================
 
         if (
-            usuarioId != null &&
-            parcelaCartaoDao
-                .listarTodasUmaVez()
-                .isEmpty()
+            usuarioId != null
         ) {
 
             try {
@@ -1061,10 +1525,7 @@ fun AppFinanceiro() {
 // =============================================
 
         if (
-            usuarioId != null &&
-            pagamentoFaturaDao
-                .listarTodosUmaVez()
-                .isEmpty()
+            usuarioId != null
         ) {
 
             try {
@@ -1326,6 +1787,18 @@ fun AppFinanceiro() {
         mutableStateOf("inicio")
     }
 
+    var faturaInicialCartaoId by remember {
+        mutableStateOf<Int?>(null)
+    }
+
+    var faturaInicialMes by remember {
+        mutableStateOf<Int?>(null)
+    }
+
+    var faturaInicialAno by remember {
+        mutableStateOf<Int?>(null)
+    }
+
     var movimentacaoEmEdicao by remember {
         mutableStateOf<Movimentacao?>(null)
     }
@@ -1383,8 +1856,23 @@ fun AppFinanceiro() {
                     telaAtual = "categorias"
                 },
                 onFaturas = {
+                    faturaInicialCartaoId = null
+                    faturaInicialMes = null
+                    faturaInicialAno = null
+
                     telaAtual = "faturas"
                 },
+
+                onAbrirFatura = {
+                    cartaoId,
+                        mes,
+                        ano ->
+                    faturaInicialCartaoId = cartaoId
+                    faturaInicialMes = mes
+                    faturaInicialAno = ano
+                    telaAtual = "faturas"
+                },
+
                 onHistorico = {
                     telaAtual = "historico"
                 },
@@ -1431,6 +1919,8 @@ fun AppFinanceiro() {
             TelaCartoes(
                 cartoes = cartoes,
                 contas = contas,
+                parcelasCartao = parcelasCartao,
+                pagamentosFatura = pagamentosFatura,
 
                 onAdicionar ={
                         nome,
@@ -1664,6 +2154,9 @@ fun AppFinanceiro() {
                 pagamentos = pagamentosFaturaComConta,
                 contas = contas,
                 cartoes = cartoes,
+                mesInicial = faturaInicialMes,
+                anoInicial = faturaInicialAno,
+                cartaoInicialExpandidoId = faturaInicialCartaoId,
 
                 onPagar = {
                         cartaoId,
@@ -3489,6 +3982,11 @@ fun TelaInicial(
     onHistorico: () -> Unit,
     onCartoes: () -> Unit,
     onFaturas: () -> Unit,
+    onAbrirFatura: (
+            cartaoId: Int,
+            mes: Int,
+            ano: Int
+            ) -> Unit,
     onExportarBackup: () -> Unit,
     onRestaurarBackup: () -> Unit,
     onSair: () -> Unit
@@ -3518,60 +4016,113 @@ fun TelaInicial(
                     !parcela.quitadaAnteriormente
         }
 
-    val faturasAtuais = parcelasFaturaAtual
+    val faturasAtuais = parcelasCartao.filter { parcela ->
+        !parcela.quitadaAnteriormente
+    }
         .groupBy { parcela ->
-            parcela.cartaoId }
+            parcela.cartaoId
+        }
         .mapNotNull { (cartaoId, parcelasDoCartao) ->
-            val cartao = cartoes.find { item ->
-                item.id == cartaoId
-            } ?: return@mapNotNull null
-
-            val total = parcelasDoCartao.sumOf { it.valor}
-
-            val pago = pagamentosFaturaComConta
-                .filter { pagamento ->
-                    pagamento.cartaoId == cartaoId &&
-                            pagamento.mesFatura == mesAtualInt &&
-                            pagamento.anoFatura == anoAtualInt
+            val cartao =
+                cartoes.find { item ->
+                    item.id == cartaoId
                 }
-                .sumOf { it.valorPago}
+                    ?: return@mapNotNull null
 
-            val restante = (total - pago).coerceAtLeast(0.0)
+            val faturasEmAberto = parcelasDoCartao
+                .groupBy { parcela ->
+                    parcela.mesFatura to
+                            parcela.anoFatura
+                }
+                .mapNotNull { (periodo, parcelasDaFatura) ->
+                    val mesFatura = periodo.first
+                    val anoFatura = periodo.second
+                    val total: Double = parcelasDaFatura
+                        .sumOf { parcela: ParcelaCartaoComDetalhes ->
+                            parcela.valor
+                        }
 
-            if (restante < 0.01) { return@mapNotNull null}
+                    val pago: Double = pagamentosFatura
+                            .filter { pagamento: PagamentoFaturaEntity ->
+                                pagamento.cartaoId == cartaoId &&
+                                pagamento.mesFatura == mesFatura &&
+                                pagamento.anoFatura == anoFatura
+                            }
+                        .sumOf { pagamento: PagamentoFaturaEntity ->
+                            pagamento.valorPago
+                        }
 
+                    val restante: Double = (total - pago)
+                        .coerceAtLeast(0.0)
+
+                    if (restante < 0.1) {
+                        null
+                    } else {
+                        Triple(
+                            anoFatura,
+                            mesFatura,
+                            restante
+                        )
+                    }
+                }
+            val faturaSelecionada = faturasEmAberto
+                .minWithOrNull(
+                    compareBy<
+                    Triple<Int, Int, Double>
+                    > { fatura ->
+                        fatura.first
+                    }
+                        .thenBy { fatura ->
+                            fatura.second
+                        }
+                )
+                ?: return@mapNotNull null
+
+            val anoFatura = faturaSelecionada.first
+            val mesFatura = faturaSelecionada.second
+            val restante = faturaSelecionada.third
             val fechamento = criarDataFatura(
                 dia = cartao.diaFechamento,
-                mes = mesAtualInt,
-                ano = anoAtualInt
+                mes= mesFatura,
+                ano = anoFatura
             )
 
             val vencimento = calcularVencimentoFatura(
-                mesFatura = mesAtualInt,
-                anoFatura = anoAtualInt,
+                mesFatura = mesFatura,
+                anoFatura = anoFatura,
                 diaFechamento = cartao.diaFechamento,
                 diaVencimento = cartao.diaVencimento
             )
 
             val status = calcularStatusFatura(
                 restante = restante,
-                mesFatura = mesAtualInt,
-                anoFatura = anoAtualInt,
+                mesFatura = mesFatura,
+                anoFatura = anoFatura,
                 diaFechamento = cartao.diaFechamento,
                 diaVencimento = cartao.diaVencimento
             )
 
+            val limiteUtilizado = calcularLimiteUtilizadoCartao(
+                cartaoId = cartao.id,
+                parcelasCartao = parcelasCartao,
+                pagamentosFatura = pagamentosFatura
+            )
             ResumoFatura(
-                cartaoNome = cartao.nome,
+                cartaoId = cartao.id,
+                cartaoNome=cartao.nome,
+                mesFatura = mesFatura,
+                anoFatura = anoFatura,
                 restante = restante,
                 fechamento = fechamento,
                 vencimento = vencimento,
-                status = status
+                status = status,
+                limite = cartao.limite,
+                limiteUtilizado = limiteUtilizado
             )
-        }
+                    }
         .sortedBy {
             it.vencimento.timeInMillis
-        }
+                }
 
     val nomesMeses = listOf(
         "Janeiro",
@@ -4531,7 +5082,11 @@ fun TelaInicial(
                                     .fillMaxWidth()
                                     .padding(vertical = 5.dp)
                                     .clickable {
-                                        onFaturas()
+                                        onAbrirFatura(
+                                            fatura.cartaoId,
+                                            fatura.mesFatura,
+                                            fatura.anoFatura
+                                        )
                                     },
 
                             shape =
@@ -4553,7 +5108,9 @@ fun TelaInicial(
 
                             Column(
                                 modifier =
-                                    Modifier.padding(16.dp)
+                                    Modifier
+                                        .fillMaxWidth()
+                                        .padding(16.dp)
                             ) {
 
                                 // =============================================
@@ -4716,15 +5273,165 @@ fun TelaInicial(
                                         )
                                     }
                                 }
+                                Spacer(
+                                    modifier = Modifier.height(16.dp)
+                                )
+
+
+                                val percentualUso =
+                                    if (fatura.limite > 0.0) {
+
+                                        fatura.limiteUtilizado /
+                                                fatura.limite
+
+                                    } else {
+                                        0.0
+                                    }
+
+
+                                val progressoBarra =
+                                    percentualUso
+                                        .coerceIn(
+                                            0.0,
+                                            1.0
+                                        )
+                                        .toFloat()
+
+
+                                val percentualExibido =
+                                    (percentualUso * 100)
+                                        .toInt()
+
+
+                                val limiteDisponivel =
+                                    (
+                                            fatura.limite -
+                                                    fatura.limiteUtilizado
+                                            )
+                                        .coerceAtLeast(0.0)
+
+
+                                val corBarra =
+                                    when {
+
+                                        percentualUso >= 0.90 ->
+                                            MaterialTheme.colorScheme.error
+
+                                        percentualUso >= 0.70 ->
+                                            BlikFatura
+
+                                        else ->
+                                            MaterialTheme.colorScheme.primary
+                                    }
+
+
+// =============================================
+// TÍTULO + PERCENTUAL
+// =============================================
+
+                                Row(
+                                    modifier =
+                                        Modifier.fillMaxWidth(),
+
+                                    horizontalArrangement =
+                                        Arrangement.SpaceBetween,
+
+                                    verticalAlignment =
+                                        androidx.compose.ui.Alignment.CenterVertically
+                                ) {
+
+                                    Text(
+                                        text = "Limite utilizado",
+                                        fontSize = 12.sp,
+                                        color =
+                                            MaterialTheme.colorScheme
+                                                .onSurfaceVariant
+                                    )
+
+
+                                    Text(
+                                        text = "$percentualExibido%",
+                                        fontSize = 12.sp,
+                                        fontWeight =
+                                            FontWeight.SemiBold,
+                                        color = corBarra
+                                    )
+                                }
+
+
+                                Spacer(
+                                    modifier = Modifier.height(6.dp)
+                                )
+
+
+// =============================================
+// BARRA
+// =============================================
+
+                                Box(
+                                    modifier =
+                                        Modifier
+                                            .fillMaxWidth()
+                                            .height(8.dp)
+                                            .background(
+                                                color =
+                                                    MaterialTheme.colorScheme
+                                                        .surfaceVariant,
+                                                shape =
+                                                    androidx.compose.foundation.shape
+                                                        .RoundedCornerShape(50.dp)
+                                            )
+                                ) {
+
+                                    if (progressoBarra > 0f) {
+
+                                        Box(
+                                            modifier =
+                                                Modifier
+                                                    .fillMaxWidth(
+                                                        progressoBarra
+                                                    )
+                                                    .height(8.dp)
+                                                    .background(
+                                                        color = corBarra,
+                                                        shape =
+                                                            androidx.compose.foundation.shape
+                                                                .RoundedCornerShape(50.dp)
+                                                    )
+                                        )
+                                    }
+                                }
+
+
+                                Spacer(
+                                    modifier = Modifier.height(10.dp)
+                                )
+
+
+// =============================================
+// UTILIZADO + DISPONÍVEL
+// =============================================
+
+                                Row(
+                                    modifier =
+                                        Modifier.fillMaxWidth(),
+
+                                    horizontalArrangement =
+                                        Arrangement.SpaceBetween,
+
+                                    verticalAlignment =
+                                        androidx.compose.ui.Alignment.Top
+                                ) {
+
+                                   }
                             }
                         }
                     }
-                }
-
-                item {
-                    Spacer(
-                        modifier = Modifier.height(20.dp)
-                    )
+                    item {
+                        Spacer(
+                            modifier = Modifier.height(20.dp)
+                        )
+                    }
                 }
             }
         }
@@ -6800,6 +7507,9 @@ fun TelaContas(
 fun TelaCartoes(
     cartoes: List<CartaoComConta>,
     contas: List<ContaEntity>,
+    parcelasCartao: List<ParcelaCartaoComDetalhes>,
+    pagamentosFatura: List<PagamentoFaturaEntity>,
+
     onAdicionar: (
         String,
         Double,
@@ -6992,6 +7702,60 @@ fun TelaCartoes(
                         cartao.id
                     }
                 ) { cartao ->
+                    val limiteUtilizado =
+                        calcularLimiteUtilizadoCartao(
+                            cartaoId = cartao.id,
+                            parcelasCartao = parcelasCartao,
+                            pagamentosFatura = pagamentosFatura
+                        )
+
+
+                    val limiteDisponivel =
+                        (
+                                cartao.limite -
+                                        limiteUtilizado
+                                )
+                            .coerceAtLeast(0.0)
+
+
+                    val percentualUso =
+                        if (cartao.limite > 0.0) {
+
+                            limiteUtilizado /
+                                    cartao.limite
+
+                        } else {
+                            0.0
+                        }
+
+
+                    val progressoBarra =
+                        percentualUso
+                            .coerceIn(
+                                0.0,
+                                1.0
+                            )
+                            .toFloat()
+
+
+                    val percentualExibido =
+                        (percentualUso * 100)
+                            .toInt()
+
+
+                    val corBarra =
+                        when {
+
+                            percentualUso >= 0.90 ->
+                                MaterialTheme.colorScheme.error
+
+                            percentualUso >= 0.70 ->
+                                BlikFatura
+
+                            else ->
+                                MaterialTheme.colorScheme.primary
+                        }
+
 
                     Card(
                         modifier =
@@ -7021,7 +7785,9 @@ fun TelaCartoes(
 
                         Column(
                             modifier =
-                                Modifier.padding(16.dp)
+                                Modifier
+                                    .fillMaxWidth()
+                                    .padding(16.dp)
                         ) {
 
                             // CABEÇALHO
@@ -7142,6 +7908,122 @@ fun TelaCartoes(
 
                                     color =
                                         MaterialTheme.colorScheme.primary
+                                )
+                            }
+
+                            Spacer(
+                                modifier = Modifier.height(12.dp)
+                            )
+
+
+                            Row(
+                                modifier =
+                                    Modifier.fillMaxWidth(),
+
+                                horizontalArrangement =
+                                    Arrangement.SpaceBetween
+                            ) {
+
+                                Text(
+                                    text = "Utilizado",
+                                    fontSize = 12.sp,
+                                    color =
+                                        MaterialTheme.colorScheme
+                                            .onSurfaceVariant
+                                )
+
+
+                                Text(
+                                    text =
+                                        "${formatarDinheiro(limiteUtilizado)} " +
+                                                "• $percentualExibido%",
+
+                                    fontSize = 12.sp,
+
+                                    fontWeight =
+                                        FontWeight.SemiBold,
+
+                                    color = corBarra
+                                )
+                            }
+
+
+                            Spacer(
+                                modifier = Modifier.height(6.dp)
+                            )
+
+
+                            Box(
+                                modifier =
+                                    Modifier
+                                        .fillMaxWidth()
+                                        .height(8.dp)
+                                        .background(
+                                            color =
+                                                MaterialTheme.colorScheme
+                                                    .surfaceVariant,
+                                            shape =
+                                                androidx.compose.foundation.shape
+                                                    .RoundedCornerShape(50.dp)
+                                        )
+                            ) {
+
+                                if (progressoBarra > 0f) {
+
+                                    Box(
+                                        modifier =
+                                            Modifier
+                                                .fillMaxWidth(
+                                                    progressoBarra
+                                                )
+                                                .height(8.dp)
+                                                .background(
+                                                    color = corBarra,
+                                                    shape =
+                                                        androidx.compose.foundation.shape
+                                                            .RoundedCornerShape(50.dp)
+                                                )
+                                    )
+                                }
+                            }
+
+
+                            Spacer(
+                                modifier = Modifier.height(7.dp)
+                            )
+
+
+                            Row(
+                                modifier =
+                                    Modifier.fillMaxWidth(),
+
+                                horizontalArrangement =
+                                    Arrangement.SpaceBetween
+                            ) {
+
+                                Text(
+                                    text = "Disponível",
+                                    fontSize = 12.sp,
+                                    color =
+                                        MaterialTheme.colorScheme
+                                            .onSurfaceVariant
+                                )
+
+
+                                Text(
+                                    text =
+                                        formatarDinheiro(
+                                            limiteDisponivel
+                                        ),
+
+                                    fontSize = 12.sp,
+
+                                    fontWeight =
+                                        FontWeight.Medium,
+
+                                    color =
+                                        MaterialTheme.colorScheme
+                                            .onSurface
                                 )
                             }
 
@@ -9814,6 +10696,10 @@ fun TelaFaturas(
     pagamentos: List<PagamentoFaturaComConta>,
     contas: List<ContaEntity>,
     cartoes: List<CartaoComConta>,
+    mesInicial: Int?,
+    anoInicial: Int?,
+    cartaoInicialExpandidoId: Int?,
+
 
     onPagar: (
         Int,
@@ -9838,16 +10724,17 @@ fun TelaFaturas(
     val calendario =
         java.util.Calendar.getInstance()
 
-    var mesSelecionado by remember {
-        mutableStateOf(
-            calendario.get(
-                java.util.Calendar.MONTH
-            ) + 1
+    var mesSelecionado by remember(mesInicial) {
+        mutableStateOf(mesInicial ?: (
+                calendario.get(
+                    java.util.Calendar.MONTH
+                ) + 1
+            )
         )
     }
 
-    var anoSelecionado by remember {
-        mutableStateOf(
+    var anoSelecionado by remember(anoInicial) {
+        mutableStateOf(anoInicial ?:
             calendario.get(
                 java.util.Calendar.YEAR
             )
@@ -9900,8 +10787,8 @@ fun TelaFaturas(
         )
     }
 
-    var cartaoExpandidoId by remember {
-        mutableStateOf<Int?>(null)
+    var cartaoExpandidoId by remember(cartaoInicialExpandidoId) {
+        mutableStateOf(cartaoInicialExpandidoId)
     }
 
     val nomesMeses =
@@ -10684,7 +11571,10 @@ fun TelaFaturas(
                                                         )
 
                                                 contaPagamento =
-                                                    contas.firstOrNull()
+                                                    contas.firstOrNull { conta ->
+                                                        conta.id == cartao?.contaId
+                                                    }
+                                                        ?: contas.firstOrNull()
 
                                                 mensagemPagamento =
                                                     ""
@@ -12083,4 +12973,5 @@ fun MarcaBlik(
             androidx.compose.ui.layout.ContentScale.Fit
     )
 }
+
 
