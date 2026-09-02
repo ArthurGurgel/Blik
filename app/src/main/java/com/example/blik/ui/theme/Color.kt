@@ -85,3 +85,64 @@ val BlikOutline =
 
 val BlikError =
     Color(0xFFBA1A1A)
+
+// =====================================================
+// TEMA ESCURO
+// =====================================================
+
+val BlikPrimaryDarkTheme =
+    Color(0xFF58D6B7)
+
+val BlikOnPrimaryDarkTheme =
+    Color(0xFF00382D)
+
+val BlikPrimaryContainerDarkTheme =
+    Color(0xFF0A493C)
+
+val BlikOnPrimaryContainerDarkTheme =
+    Color(0xFFA4F2DB)
+
+
+val BlikBackgroundDarkTheme =
+    Color(0xFF0E1211)
+
+val BlikSurfaceDarkTheme =
+    Color(0xFF151A19)
+
+val BlikSurfaceVariantDarkTheme =
+    Color(0xFF202725)
+
+
+val BlikTextPrimaryDarkTheme =
+    Color(0xFFF0F5F3)
+
+val BlikTextSecondaryDarkTheme =
+    Color(0xFFAAB5B2)
+
+
+val BlikOutlineDarkTheme =
+    Color(0xFF3B4945)
+
+
+val BlikErrorDarkTheme =
+    Color(0xFFFFB4AB)
+
+val BlikErrorContainerDarkTheme =
+    Color(0xFF5B1B1B)
+
+
+val BlikFaturaDarkTheme =
+    Color(0xFFFFB86A)
+
+val BlikFaturaContainerDarkTheme =
+    Color(0xFF4A2B0B)
+
+// =====================================================
+// CARD PRINCIPAL DA HOME - TEMA ESCURO
+// =====================================================
+
+val BlikHomeCardDark =
+    Color(0xFF0B2F43)
+
+val BlikHomeCardTextDark =
+    Color(0xFFF1F7FA)

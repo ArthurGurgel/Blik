@@ -1,12 +1,5 @@
 package com.example.blik
 
-import com.example.blik.ui.theme.BlikLogo
-import com.example.blik.ui.theme.BlikPrimary
-import com.example.blik.ui.theme.BlikEntradaContainer
-import com.example.blik.ui.theme.BlikFatura
-import com.example.blik.ui.theme.BlikFaturaContainer
-import com.example.blik.ui.theme.BlikSaida
-import com.example.blik.ui.theme.BlikSaidaContainer
 import android.os.Bundle
 import android.widget.Toast
 import android.content.Intent
@@ -29,11 +22,17 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.Image
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -55,6 +54,7 @@ import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.runtime.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -67,6 +67,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
@@ -77,11 +78,17 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.core.view.WindowCompat
 import androidx.room.Room
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -185,10 +192,90 @@ class MainActivity :
             intent
         )
 
+        val preferenciasAppRepository =
+            PreferenciasAppRepository(
+                applicationContext
+            )
 
         setContent {
 
-            BlikTheme {
+            val modoTema by
+            preferenciasAppRepository
+                .modoTema
+                .collectAsState(
+                    initial =
+                        ModoTema.SISTEMA
+                )
+
+            val sistemaEscuro =
+                isSystemInDarkTheme()
+
+
+            val usarTemaEscuro =
+                when (modoTema) {
+
+                    ModoTema.SISTEMA ->
+                        sistemaEscuro
+
+                    ModoTema.CLARO ->
+                        false
+
+                    ModoTema.ESCURO ->
+                        true
+                }
+
+
+            val corBarrasSistema =
+                if (usarTemaEscuro) {
+
+                    // mesmo fundo escuro principal do Blik
+                    Color(0xFF0E1211)
+
+                } else {
+
+                    // mesmo fundo claro principal do Blik
+                    Color(0xFFF7F8F8)
+                }
+
+
+            SideEffect {
+
+                val controladorBarras =
+                    WindowCompat.getInsetsController(
+                        window,
+                        window.decorView
+                    )
+
+
+                // Ícones ESCUROS no tema claro
+                // Ícones CLAROS no tema escuro
+                controladorBarras
+                    .isAppearanceLightStatusBars =
+                    !usarTemaEscuro
+
+
+                controladorBarras
+                    .isAppearanceLightNavigationBars =
+                    !usarTemaEscuro
+
+
+                window.statusBarColor =
+                    corBarrasSistema.toArgb()
+
+
+                window.navigationBarColor =
+                    corBarrasSistema.toArgb()
+            }
+
+
+            val scopeTema =
+                rememberCoroutineScope()
+
+
+            BlikTheme(
+                modoTema =
+                    modoTema
+            ) {
 
                 BlikApp(
                     modoRecuperacaoSenha =
@@ -198,6 +285,21 @@ class MainActivity :
 
                         modoRecuperacaoSenha =
                             false
+                    },
+
+                    modoTema =
+                        modoTema,
+
+                    onModoTemaAlterado = {
+                            novoModo ->
+
+                        scopeTema.launch {
+
+                            preferenciasAppRepository
+                                .salvarModoTema(
+                                    novoModo
+                                )
+                        }
                     }
                 )
             }
@@ -402,7 +504,9 @@ private fun mensagemAmigavelCadastro(
 @Composable
 fun BlikApp(
     modoRecuperacaoSenha: Boolean = false,
-    onRecuperacaoConcluida: () -> Unit = {}
+    onRecuperacaoConcluida: () -> Unit = {},
+    modoTema: ModoTema = ModoTema.SISTEMA,
+    onModoTemaAlterado: (ModoTema) -> Unit = {}
 ) {
 
     val auth =
@@ -572,7 +676,13 @@ fun BlikApp(
 
                 if (usuarioValido) {
 
-                    AppFinanceiro()
+                    AppFinanceiro(
+                        modoTema =
+                            modoTema,
+
+                        onModoTemaAlterado =
+                            onModoTemaAlterado
+                    )
 
                 } else {
 
@@ -708,7 +818,13 @@ fun BlikApp(
 }
 
 @Composable
-fun AppFinanceiro() {
+fun AppFinanceiro(
+    modoTema: ModoTema,
+    onModoTemaAlterado: (ModoTema) -> Unit
+) {
+
+    val planoAtual =
+        PlanoUsuario.PRO
 
     val context = LocalContext.current
 
@@ -1843,6 +1959,7 @@ fun AppFinanceiro() {
                 pagamentosFaturaComConta = pagamentosFaturaComConta,
                 cartoes = cartoes,
 
+
                 onNovaMovimentacao = {
                     telaAtual = "nova_movimentacao"
                 },
@@ -1892,6 +2009,10 @@ fun AppFinanceiro() {
                             "text/plain"
                         )
                     )
+                },
+
+                onConfiguracoes = {
+                    telaAtual = "configuracoes"
                 },
 
                 onSair = {
@@ -3320,6 +3441,25 @@ fun AppFinanceiro() {
             )
         }
 
+        "configuracoes" -> {
+
+            TelaConfiguracoes(
+                modoTema =
+                    modoTema,
+
+                onModoTemaAlterado =
+                    onModoTemaAlterado,
+
+                planoAtual =
+                    planoAtual,
+
+                onVoltar = {
+                    telaAtual =
+                        "inicio"
+                }
+            )
+        }
+
         "historico" -> {
 
             TelaHistorico(
@@ -3989,6 +4129,7 @@ fun TelaInicial(
             ) -> Unit,
     onExportarBackup: () -> Unit,
     onRestaurarBackup: () -> Unit,
+    onConfiguracoes: () -> Unit,
     onSair: () -> Unit
 ) {
     val calendario = java.util.Calendar.getInstance()
@@ -4145,7 +4286,7 @@ fun TelaInicial(
         ]
 
     val periodoAtual =
-        "$nomeMesAtual de $anoAtual"
+        "$nomeMesAtual"
 
     val movimentacoesDoMes =
         movimentacoes.filter { movimentacao ->
@@ -4493,6 +4634,40 @@ fun TelaInicial(
 
                 NavigationDrawerItem(
                     label = {
+                        Text(
+                            "Configurações"
+                        )
+                    },
+
+                    selected = false,
+
+                    onClick = {
+
+                        scope.launch {
+                            drawerState.close()
+                        }
+
+                        onConfiguracoes()
+                    },
+
+                    modifier =
+                        Modifier.padding(
+                            horizontal = 12.dp,
+                            vertical = 2.dp
+                        ),
+
+                    shape =
+                        androidx.compose.foundation.shape
+                            .RoundedCornerShape(
+                                14.dp
+                            ),
+
+                    colors =
+                        coresItemDrawer
+                )
+
+                NavigationDrawerItem(
+                    label = {
                         Text("Exportar backup")
                     },
 
@@ -4612,7 +4787,7 @@ fun TelaInicial(
                                     MaterialTheme.colorScheme.background,
 
                                 titleContentColor =
-                                    BlikLogo,
+                                    MaterialTheme.colorScheme.onBackground,
 
                                 navigationIconContentColor =
                                     MaterialTheme.colorScheme.onBackground
@@ -4661,174 +4836,372 @@ fun TelaInicial(
                 )
             ) {
                 item {
+                    val usarTemaEscuro =
+                        MaterialTheme.colorScheme.background
+                            .luminance() < 0.5f
+
+
+                    val corTextoCard =
+                        if (usarTemaEscuro) {
+                            Color(0xFFF5F7FA)
+                        } else {
+                            MaterialTheme.colorScheme.onPrimaryContainer
+                        }
+
+
+                    val corTextoSecundarioCard =
+                        if (usarTemaEscuro) {
+                            Color(0xFFF5F7FA)
+                                .copy(alpha = 0.72f)
+                        } else {
+                            MaterialTheme.colorScheme
+                                .onPrimaryContainer
+                                .copy(alpha = 0.75f)
+                        }
+
+
+// =====================================================
+// CARD PRINCIPAL - SALDO
+// =====================================================
+
                     Card(
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier =
+                            Modifier.fillMaxWidth(),
+
                         shape =
-                            androidx.compose.foundation.shape.RoundedCornerShape(
-                                24.dp
-                            ),
+                            RoundedCornerShape(24.dp),
+
                         colors =
-                            androidx.compose.material3.CardDefaults.cardColors(
+                            CardDefaults.cardColors(
                                 containerColor =
-                                    MaterialTheme.colorScheme.primaryContainer
+                                    if (usarTemaEscuro) {
+                                        Color.Transparent
+                                    } else {
+                                        // mantém o verde original no tema claro
+                                        MaterialTheme.colorScheme.primaryContainer
+                                    }
+                            ),
+
+                        elevation =
+                            CardDefaults.cardElevation(
+                                defaultElevation =
+                                    if (usarTemaEscuro) {
+                                        3.dp
+                                    } else {
+                                        0.dp
+                                    }
                             )
                     ) {
 
-                        Column(
+                        Box(
                             modifier =
-                                Modifier.padding(
-                                    horizontal = 22.dp,
-                                    vertical = 20.dp
-                                )
+                                if (usarTemaEscuro) {
+
+                                    Modifier
+                                        .fillMaxWidth()
+
+                                        // fundo grafite refinado
+                                        .background(
+                                            brush =
+                                                Brush.linearGradient(
+                                                    colors =
+                                                        listOf(
+                                                            Color(0xFF2B2F34),
+                                                            Color(0xFF3A3F45),
+                                                            Color(0xFF30343A)
+                                                        ),
+
+                                                    start =
+                                                        Offset.Zero,
+
+                                                    end =
+                                                        Offset(
+                                                            900f,
+                                                            700f
+                                                        )
+                                                ),
+
+                                            shape =
+                                                RoundedCornerShape(
+                                                    24.dp
+                                                )
+                                        )
+
+                                        // contorno discreto
+                                        .border(
+                                            width =
+                                                1.dp,
+
+                                            color =
+                                                Color.White.copy(
+                                                    alpha = 0.08f
+                                                ),
+
+                                            shape =
+                                                RoundedCornerShape(
+                                                    24.dp
+                                                )
+                                        )
+
+                                        .padding(
+                                            horizontal = 20.dp,
+                                            vertical = 20.dp
+                                        )
+
+                                } else {
+
+                                    // no claro não aplicamos gradiente,
+                                    // brilho ou outro efeito.
+                                    Modifier
+                                        .fillMaxWidth()
+                                        .padding(
+                                            horizontal = 20.dp,
+                                            vertical = 20.dp
+                                        )
+                                }
                         ) {
 
-                            Text(
-                                text = "Saldo total",
-                                fontSize = 16.sp,
-                                color =
-                                    MaterialTheme.colorScheme
-                                        .onPrimaryContainer
-                                        .copy(alpha = 0.80f)
-                            )
-
-                            Spacer(
-                                modifier = Modifier.height(1.dp)
-                            )
-
-                            Text(
-                                text =
-                                    formatarDinheiro(
-                                        saldoAtual
-                                    ),
-                                fontSize = 32.sp,
-                                fontWeight = FontWeight.Bold,
-                                color =
-                                    MaterialTheme.colorScheme
-                                        .onPrimaryContainer
-                            )
-
-                            Spacer(
-                                modifier = Modifier.height(16.dp)
-                            )
-
-                            Row(
+                            Column(
                                 modifier =
-                                    Modifier.fillMaxWidth(),
-                                horizontalArrangement =
-                                    Arrangement.SpaceBetween,
-                                verticalAlignment =
-                                    androidx.compose.ui.Alignment
-                                        .Top
+                                    Modifier.fillMaxWidth()
                             ) {
 
-                                Column(
+                                // =========================================
+                                // SALDO TOTAL
+                                // =========================================
+
+                                Text(
+                                    text =
+                                        "Saldo total",
+
+                                    fontSize =
+                                        16.sp,
+
+                                    color =
+                                        corTextoSecundarioCard
+                                )
+
+
+                                Spacer(
                                     modifier =
-                                        Modifier.weight(1f)
+                                        Modifier.height(6.dp)
+                                )
+
+
+                                Text(
+                                    text =
+                                        formatarDinheiro(
+                                            saldoAtual
+                                        ),
+
+                                    fontSize =
+                                        32.sp,
+
+                                    fontWeight =
+                                        FontWeight.Bold,
+
+                                    color =
+                                        corTextoCard,
+
+                                    maxLines =
+                                        1,
+
+                                    softWrap =
+                                        false
+                                )
+
+
+                                Spacer(
+                                    modifier =
+                                        Modifier.height(22.dp)
+                                )
+
+
+                                // =========================================
+                                // ENTRADAS / PERÍODO / SAÍDAS
+                                // =========================================
+
+                                Row(
+                                    modifier =
+                                        Modifier.fillMaxWidth(),
+
+                                    verticalAlignment =
+                                        Alignment.Top
                                 ) {
 
-                                    Text(
-                                        text = "Entradas",
-                                        fontSize = 14.sp,
-                                        fontWeight = FontWeight.Medium,
-                                        color =
-                                            MaterialTheme.colorScheme
-                                                .onPrimaryContainer
-                                                .copy(alpha = 0.70f)
-                                    )
+                                    // =====================================
+                                    // ENTRADAS
+                                    // =====================================
 
-                                    Spacer(
+                                    Column(
                                         modifier =
-                                            Modifier.height(0.dp)
-                                    )
+                                            Modifier.weight(1f),
 
-                                    Text(
-                                        text =
-                                            formatarDinheiro(
-                                                entradasDoMes
-                                            ),
-                                        fontWeight =
-                                            FontWeight.SemiBold,
-                                        fontSize = 16.sp,
-                                        color =
-                                            MaterialTheme.colorScheme
-                                                .onPrimaryContainer
-                                    )
-                                }
+                                        horizontalAlignment =
+                                            Alignment.Start
+                                    ) {
 
-                                Column(
-                                    modifier =
-                                        Modifier.weight(1f),
-                                    horizontalAlignment =
-                                        androidx.compose.ui.Alignment
-                                            .CenterHorizontally
-                                ) {
+                                        Text(
+                                            text =
+                                                "Entradas",
 
-                                    Text(
-                                        text = periodoAtual,
-                                        fontSize = 12.sp,
-                                        fontWeight =
-                                            FontWeight.Medium,
-                                        color =
-                                            MaterialTheme.colorScheme
-                                                .onPrimaryContainer
-                                                .copy(alpha = 0.75f)
-                                    )
+                                            fontSize =
+                                                13.sp,
 
-                                    Spacer(
+                                            color =
+                                                corTextoSecundarioCard,
+
+                                            maxLines =
+                                                1
+                                        )
+
+
+                                        Spacer(
+                                            modifier =
+                                                Modifier.height(4.dp)
+                                        )
+
+
+                                        Text(
+                                            text =
+                                                formatarDinheiro(
+                                                    entradasDoMes
+                                                ),
+
+                                            fontSize =
+                                                16.sp,
+
+                                            fontWeight =
+                                                FontWeight.SemiBold,
+
+                                            color =
+                                                corTextoCard,
+
+                                            maxLines =
+                                                1,
+
+                                            softWrap =
+                                                false
+                                        )
+                                    }
+
+
+                                    // =====================================
+                                    // PERÍODO
+                                    // =====================================
+
+                                    Column(
                                         modifier =
-                                            Modifier.height(2.dp)
-                                    )
+                                            Modifier.weight(1.15f),
 
-                                    Text(
-                                        text = "—",
-                                        fontSize = 16.sp,
-                                        color =
-                                            MaterialTheme.colorScheme
-                                                .onPrimaryContainer
-                                                .copy(alpha = 0.45f)
-                                    )
-                                }
+                                        horizontalAlignment =
+                                            Alignment.CenterHorizontally
+                                    ) {
 
-                                Column(
-                                    modifier =
-                                        Modifier.weight(1f),
-                                    horizontalAlignment =
-                                        androidx.compose.ui.Alignment
-                                            .End
-                                ) {
+                                        Text(
+                                            text =
+                                                periodoAtual,
 
-                                    Text(
-                                        text = "Saídas",
-                                        fontSize = 14.sp,
-                                        fontWeight = FontWeight.Medium,
-                                        color =
-                                            MaterialTheme.colorScheme
-                                                .onPrimaryContainer
-                                                .copy(alpha = 0.70f)
-                                    )
+                                            fontSize =
+                                                12.sp,
 
-                                    Spacer(
+                                            color =
+                                                corTextoSecundarioCard,
+
+                                            textAlign =
+                                                TextAlign.Center,
+
+                                            maxLines =
+                                                2
+                                        )
+
+
+                                        Spacer(
+                                            modifier =
+                                                Modifier.height(4.dp)
+                                        )
+
+
+                                        Text(
+                                            text =
+                                                "—",
+
+                                            fontSize =
+                                                16.sp,
+
+                                            color =
+                                                corTextoCard.copy(
+                                                    alpha = 0.40f
+                                                )
+                                        )
+                                    }
+
+
+                                    // =====================================
+                                    // SAÍDAS
+                                    // =====================================
+
+                                    Column(
                                         modifier =
-                                            Modifier.height(0.dp)
-                                    )
+                                            Modifier.weight(1f),
 
-                                    Text(
-                                        text =
-                                            formatarDinheiro(
-                                                saidasDoMes
-                                            ),
-                                        fontWeight =
-                                            FontWeight.SemiBold,
-                                        fontSize = 16.sp,
-                                        color =
-                                            MaterialTheme.colorScheme
-                                                .onPrimaryContainer
-                                    )
+                                        horizontalAlignment =
+                                            Alignment.End
+                                    ) {
+
+                                        Text(
+                                            text =
+                                                "Saídas",
+
+                                            fontSize =
+                                                13.sp,
+
+                                            color =
+                                                corTextoSecundarioCard,
+
+                                            textAlign =
+                                                TextAlign.End,
+
+                                            maxLines =
+                                                1
+                                        )
+
+
+                                        Spacer(
+                                            modifier =
+                                                Modifier.height(4.dp)
+                                        )
+
+
+                                        Text(
+                                            text =
+                                                formatarDinheiro(
+                                                    saidasDoMes
+                                                ),
+
+                                            fontSize =
+                                                16.sp,
+
+                                            fontWeight =
+                                                FontWeight.SemiBold,
+
+                                            color =
+                                                corTextoCard,
+
+                                            textAlign =
+                                                TextAlign.End,
+
+                                            maxLines =
+                                                1,
+
+                                            softWrap =
+                                                false
+                                        )
+                                    }
                                 }
                             }
                         }
                     }
-
                     Spacer(
                         modifier = Modifier.height(24.dp)
                     )
@@ -5053,26 +5426,26 @@ fun TelaInicial(
                             when (fatura.status) {
 
                                 "Vencida" ->
-                                    BlikSaida
+                                    MaterialTheme.colorScheme.error
 
                                 "Fechada" ->
-                                    BlikFatura
+                                    MaterialTheme.colorScheme.tertiary
 
                                 else ->
-                                    BlikPrimary
+                                    MaterialTheme.colorScheme.primary
                             }
 
                         val corFundoStatus =
                             when (fatura.status) {
 
                                 "Vencida" ->
-                                    BlikSaidaContainer
+                                    MaterialTheme.colorScheme.errorContainer
 
                                 "Fechada" ->
-                                    BlikFaturaContainer
+                                    MaterialTheme.colorScheme.tertiaryContainer
 
                                 else ->
-                                    BlikEntradaContainer
+                                    MaterialTheme.colorScheme.primaryContainer
                             }
 
 
@@ -5318,7 +5691,7 @@ fun TelaInicial(
                                             MaterialTheme.colorScheme.error
 
                                         percentualUso >= 0.70 ->
-                                            BlikFatura
+                                            MaterialTheme.colorScheme.tertiary
 
                                         else ->
                                             MaterialTheme.colorScheme.primary
@@ -6983,7 +7356,7 @@ fun TelaContas(
                                 Modifier.background(
                                     color =
                                         if (conta.ativa) {
-                                            BlikEntradaContainer
+                                            MaterialTheme.colorScheme.primaryContainer
                                         } else {
                                             MaterialTheme.colorScheme
                                                 .surfaceVariant
@@ -7018,7 +7391,7 @@ fun TelaContas(
 
                                 color =
                                     if (conta.ativa) {
-                                        BlikPrimary
+                                        MaterialTheme.colorScheme.primary
                                     } else {
                                         MaterialTheme.colorScheme
                                             .onSurfaceVariant
@@ -7750,7 +8123,7 @@ fun TelaCartoes(
                                 MaterialTheme.colorScheme.error
 
                             percentualUso >= 0.70 ->
-                                BlikFatura
+                                MaterialTheme.colorScheme.tertiary
 
                             else ->
                                 MaterialTheme.colorScheme.primary
@@ -9953,10 +10326,10 @@ fun TelaHistorico(
                         when (movimentacao.tipo) {
 
                             "Entrada" ->
-                                BlikPrimary
+                                MaterialTheme.colorScheme.primary
 
                             "Saída" ->
-                                BlikSaida
+                                MaterialTheme.colorScheme.error
 
                             else ->
                                 MaterialTheme.colorScheme.onSurface
@@ -10333,10 +10706,10 @@ fun TelaHistorico(
                 when (movimentacao.tipo) {
 
                     "Entrada" ->
-                        BlikPrimary
+                        MaterialTheme.colorScheme.primary
 
                     "Saída" ->
-                        BlikSaida
+                        MaterialTheme.colorScheme.error
 
                     else ->
                         MaterialTheme.colorScheme.onSurface
@@ -10347,10 +10720,10 @@ fun TelaHistorico(
                 when (movimentacao.tipo) {
 
                     "Entrada" ->
-                        BlikEntradaContainer
+                        MaterialTheme.colorScheme.primaryContainer
 
                     "Saída" ->
-                        BlikSaidaContainer
+                        MaterialTheme.colorScheme.errorContainer
 
                     else ->
                         MaterialTheme.colorScheme.surfaceVariant
@@ -11169,48 +11542,44 @@ fun TelaFaturas(
                             )
                         } else { "Indisponível"}
 
-                    val corStatusFatura =
-                        when (statusFatura) {
-
-                            "Vencida" ->
-                                BlikSaida
-
-                            "Fechada" ->
-                                BlikFatura
-
-                            "Paga" ->
-                                BlikPrimary
-
-                            else ->
-                                BlikPrimary
-                        }
-
-
-                    val fundoStatusFatura =
-                        when (statusFatura) {
-
-                            "Vencida" ->
-                                BlikSaidaContainer
-
-                            "Fechada" ->
-                                BlikFaturaContainer
-
-                            "Paga" ->
-                                BlikEntradaContainer
-
-                            else ->
-                                BlikEntradaContainer
-                        }
-
                     val estaExpandido =
                         cartaoExpandidoId == cartaoId
 
-
-                    // =============================================
-                    // CABEÇALHO DA FATURA
-                    // =============================================
-
                     item {
+
+                        val corStatusFatura =
+                            when (statusFatura) {
+
+                                "Vencida" ->
+                                    MaterialTheme.colorScheme.error
+
+                                "Fechada" ->
+                                    MaterialTheme.colorScheme.tertiary
+
+                                "Paga" ->
+                                    MaterialTheme.colorScheme.primary
+
+                                else ->
+                                    MaterialTheme.colorScheme.primary
+                            }
+
+
+                        val fundoStatusFatura =
+                            when (statusFatura) {
+
+                                "Vencida" ->
+                                    MaterialTheme.colorScheme.errorContainer
+
+                                "Fechada" ->
+                                    MaterialTheme.colorScheme.tertiaryContainer
+
+                                "Paga" ->
+                                    MaterialTheme.colorScheme.primaryContainer
+
+                                else ->
+                                    MaterialTheme.colorScheme.primaryContainer
+                            }
+
 
                         Card(
                             modifier =
@@ -11364,7 +11733,7 @@ fun TelaFaturas(
                                             FontWeight.Bold,
 
                                         color =
-                                            BlikPrimary
+                                            MaterialTheme.colorScheme.primary
                                     )
                                 }
 
@@ -11530,7 +11899,7 @@ fun TelaFaturas(
                                                     FontWeight.SemiBold,
 
                                                 color =
-                                                    BlikPrimary
+                                                    MaterialTheme.colorScheme.primary
                                             )
                                         }
                                     }
@@ -11855,7 +12224,7 @@ fun TelaFaturas(
                                                             FontWeight.Bold,
 
                                                         color =
-                                                            BlikPrimary
+                                                            MaterialTheme.colorScheme.primary
                                                     )
                                                 }
                                             }
@@ -11951,7 +12320,7 @@ fun TelaFaturas(
                                     .fillMaxWidth()
                                     .background(
                                         color =
-                                            BlikFaturaContainer,
+                                            MaterialTheme.colorScheme.tertiaryContainer,
 
                                         shape =
                                             androidx.compose.foundation.shape
@@ -11994,7 +12363,7 @@ fun TelaFaturas(
                                         FontWeight.Bold,
 
                                     color =
-                                        BlikFatura
+                                        MaterialTheme.colorScheme.tertiary
                                 )
                             }
                         }
@@ -12336,7 +12705,7 @@ fun TelaFaturas(
                                     .fillMaxWidth()
                                     .background(
                                         color =
-                                            BlikSaidaContainer,
+                                            MaterialTheme.colorScheme.errorContainer,
 
                                         shape =
                                             androidx.compose.foundation.shape
@@ -12379,7 +12748,7 @@ fun TelaFaturas(
                                         FontWeight.Bold,
 
                                     color =
-                                        BlikSaida
+                                        MaterialTheme.colorScheme.error
                                 )
                             }
                         }

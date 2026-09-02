@@ -82,4 +82,5 @@ dependencies {
     implementation("io.github.jan-tennert.supabase:auth-kt")
     implementation("io.github.jan-tennert.supabase:postgrest-kt")
     implementation("io.ktor:ktor-client-android:3.5.1")
+    implementation(libs.androidx.datastore.preferences)
 }
