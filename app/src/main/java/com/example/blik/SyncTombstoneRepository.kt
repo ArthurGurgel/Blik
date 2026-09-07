@@ -22,14 +22,15 @@ object SyncTombstoneRepository {
 
         categoriaDao: CategoriaDao,
 
+        orcamentoDao: OrcamentoDao,
+
         cartaoDao: CartaoDao,
 
         movimentacaoDao: MovimentacaoDao,
 
         parcelaCartaoDao: ParcelaCartaoDao,
 
-        pagamentoFaturaDao:
-        PagamentoFaturaDao
+        pagamentoFaturaDao: PagamentoFaturaDao
 
     ): Int {
 
@@ -106,6 +107,20 @@ object SyncTombstoneRepository {
 
                 quantidadeExcluida +=
                     cartaoDao
+                        .excluirPorSyncId(
+                            item.registroId
+                        )
+            }
+
+        exclusoes
+            .filter {
+                it.tipoEntidade ==
+                        "orcamentos"
+            }
+            .forEach { item ->
+
+                quantidadeExcluida +=
+                    orcamentoDao
                         .excluirPorSyncId(
                             item.registroId
                         )

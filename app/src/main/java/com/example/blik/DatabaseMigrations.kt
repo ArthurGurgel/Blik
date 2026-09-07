@@ -102,3 +102,58 @@ val MIGRATION_13_14 =
             )
         }
     }
+val MIGRATION_14_15 =
+    object : Migration(14, 15) {
+
+        override fun migrate(
+            db: SupportSQLiteDatabase
+        ) {
+
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS orcamentos (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                    referencia TEXT NOT NULL,
+                    mes INTEGER NOT NULL,
+                    ano INTEGER NOT NULL,
+                    tipo TEXT NOT NULL,
+                    categoriaId INTEGER,
+                    limiteMensal REAL NOT NULL,
+                    ativo INTEGER NOT NULL,
+                    syncId TEXT,
+                    FOREIGN KEY(categoriaId)
+                        REFERENCES categorias(id)
+                        ON UPDATE NO ACTION
+                        ON DELETE CASCADE
+                )
+                """.trimIndent()
+            )
+
+
+            db.execSQL(
+                """
+                CREATE UNIQUE INDEX IF NOT EXISTS
+                index_orcamentos_referencia
+                ON orcamentos(referencia)
+                """.trimIndent()
+            )
+
+
+            db.execSQL(
+                """
+                CREATE INDEX IF NOT EXISTS
+                index_orcamentos_categoriaId
+                ON orcamentos(categoriaId)
+                """.trimIndent()
+            )
+
+
+            db.execSQL(
+                """
+                CREATE UNIQUE INDEX IF NOT EXISTS
+                index_orcamentos_syncId
+                ON orcamentos(syncId)
+                """.trimIndent()
+            )
+        }
+    }

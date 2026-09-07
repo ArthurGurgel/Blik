@@ -137,4 +137,35 @@ object SyncIdRepository {
 
         return quantidade
     }
+
+    suspend fun preencherOrcamentos(
+        orcamentoDao: OrcamentoDao
+    ): Int {
+
+        val registros =
+            orcamentoDao
+                .listarSemSyncId()
+
+        var quantidade =
+            0
+
+
+        registros.forEach { item ->
+
+            quantidade +=
+                orcamentoDao
+                    .definirSyncId(
+                        id =
+                            item.id,
+
+                        syncId =
+                            UUID
+                                .randomUUID()
+                                .toString()
+                    )
+        }
+
+
+        return quantidade
+    }
 }

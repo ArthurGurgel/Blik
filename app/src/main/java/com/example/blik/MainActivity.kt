@@ -823,6 +823,15 @@ fun AppFinanceiro(
     onModoTemaAlterado: (ModoTema) -> Unit
 ) {
 
+// =====================================================
+// PLANO DO USUÁRIO
+// =====================================================
+
+// TEMPORÁRIO:
+// durante o desenvolvimento usamos PRO para permitir
+// testar todos os recursos premium.
+// Futuramente este valor virá da assinatura do usuário.
+
     val planoAtual =
         PlanoUsuario.PRO
 
@@ -835,7 +844,8 @@ fun AppFinanceiro(
             "blik.db"
         )
             .addMigrations(
-                MIGRATION_13_14
+                MIGRATION_13_14,
+                MIGRATION_14_15
             )
             .build()
     }
@@ -846,6 +856,7 @@ fun AppFinanceiro(
     val cartaoDao = banco.cartaoDao()
     val parcelaCartaoDao = banco.parcelaCartaoDao()
     val pagamentoFaturaDao = banco.pagamentoFaturaDao()
+    val orcamentoDao = banco.orcamentoDao()
 
 
     val parcelasCartao by parcelaCartaoDao
@@ -1361,6 +1372,9 @@ fun AppFinanceiro(
                             cartaoDao =
                                 cartaoDao,
 
+                            orcamentoDao =
+                                orcamentoDao,
+
                             movimentacaoDao =
                                 dao,
 
@@ -1513,6 +1527,38 @@ fun AppFinanceiro(
             )
         }
 
+
+// =============================================
+// SUPABASE -> ROOM
+// BAIXA ORÇAMENTOS DEPOIS DAS CATEGORIAS
+// =============================================
+
+        if (usuarioId != null) {
+
+            try {
+
+                val quantidadeBaixada =
+                    OrcamentoSyncRepository.baixarTodosParaRoom(
+                        orcamentoDao = orcamentoDao,
+                        categoriaDao = categoriaDao
+                    )
+
+                if (quantidadeBaixada > 0) {
+                    Toast.makeText(
+                        context,
+                        "$quantidadeBaixada orçamento(s) baixado(s) da nuvem.",
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
+
+            } catch (e: Exception) {
+                Toast.makeText(
+                    context,
+                    "Não foi possível baixar os orçamentos: ${e.message}",
+                    Toast.LENGTH_LONG
+                ).show()
+            }
+        }
 
 // =============================================
 // SUPABASE -> ROOM
@@ -1700,6 +1746,11 @@ fun AppFinanceiro(
                 categoriaDao
             )
 
+        val orcamentosAtualizados =
+            SyncIdRepository.preencherOrcamentos(
+                orcamentoDao
+            )
+
         val cartoesAtualizados =
             SyncIdRepository.preencherCartoes(
                 cartaoDao
@@ -1722,6 +1773,7 @@ fun AppFinanceiro(
 
         val totalAtualizado =
             categoriasAtualizadas +
+                    orcamentosAtualizados +
                     cartoesAtualizados +
                     movimentacoesAtualizadas +
                     parcelasAtualizadas +
@@ -1733,6 +1785,7 @@ fun AppFinanceiro(
                 """
         Preparados para sincronização:
         Categorias: $categoriasAtualizadas
+        Orçamentos: $orcamentosAtualizados
         Cartões: $cartoesAtualizados
         Movimentações: $movimentacoesAtualizadas
         Parcelas: $parcelasAtualizadas
@@ -1767,6 +1820,28 @@ fun AppFinanceiro(
             } catch (e: Exception) {
 
             }
+            try {
+
+                val orcamentosParaSincronizar =
+                    orcamentoDao.listarTodosUmaVez()
+
+                val categoriasParaRelacionamento =
+                    categoriaDao.listarTodasUmaVez()
+
+                OrcamentoSyncRepository.sincronizarTodos(
+                    orcamentos = orcamentosParaSincronizar,
+                    categorias = categoriasParaRelacionamento,
+                    usuarioId = usuarioId
+                )
+
+            } catch (e: Exception) {
+                Toast.makeText(
+                    context,
+                    "Não foi possível sincronizar os orçamentos: ${e.message}",
+                    Toast.LENGTH_LONG
+                ).show()
+            }
+
             try {
 
                 val cartoesParaSincronizar =
