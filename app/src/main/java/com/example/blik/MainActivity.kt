@@ -62,11 +62,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
 import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -83,8 +80,6 @@ import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -1974,19 +1969,19 @@ fun AppFinanceiro(
 
     val scope = rememberCoroutineScope()
 
-    var telaAtual by remember {
+    var telaAtual by rememberSaveable {
         mutableStateOf("inicio")
     }
 
-    var faturaInicialCartaoId by remember {
+    var faturaInicialCartaoId by rememberSaveable {
         mutableStateOf<Int?>(null)
     }
 
-    var faturaInicialMes by remember {
+    var faturaInicialMes by rememberSaveable {
         mutableStateOf<Int?>(null)
     }
 
-    var faturaInicialAno by remember {
+    var faturaInicialAno by rememberSaveable {
         mutableStateOf<Int?>(null)
     }
 
@@ -2025,6 +2020,15 @@ fun AppFinanceiro(
 
     when (telaAtual) {
 
+        "orcamentos" -> TelaOrcamentos(
+            banco = banco,
+            planoAtual = planoAtual,
+            categorias = categorias,
+            movimentacoes = movimentacoes,
+            parcelas = parcelasCartao,
+            onVoltar = { telaAtual = "inicio" }
+        )
+
         "inicio" -> {
             TelaInicial(
                 movimentacoes = movimentacoes,
@@ -2046,6 +2050,9 @@ fun AppFinanceiro(
                 },
                 onCategorias = {
                     telaAtual = "categorias"
+                },
+                onOrcamentos = {
+                    telaAtual = "orcamentos"
                 },
                 onFaturas = {
                     faturaInicialCartaoId = null
@@ -4194,6 +4201,7 @@ fun TelaInicial(
     onNovaMovimentacao: () -> Unit,
     onContas: () -> Unit,
     onCategorias: () -> Unit,
+    onOrcamentos: () -> Unit,
     onHistorico: () -> Unit,
     onCartoes: () -> Unit,
     onFaturas: () -> Unit,
@@ -4674,6 +4682,20 @@ fun TelaInicial(
                             14.dp
                         ),
 
+                    colors = coresItemDrawer
+                )
+
+                NavigationDrawerItem(
+                    label = {
+                        Text("Orçamentos • PRO")
+                    },
+                    selected = false,
+                    onClick = {
+                        scope.launch { drawerState.close() }
+                        onOrcamentos()
+                    },
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp),
+                    shape = RoundedCornerShape(14.dp),
                     colors = coresItemDrawer
                 )
 
