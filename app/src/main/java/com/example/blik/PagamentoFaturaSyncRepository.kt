@@ -12,10 +12,6 @@ object PagamentoFaturaSyncRepository {
         )
 
 
-    // =============================================
-    // ROOM -> SUPABASE
-    // SINCRONIZA UM PAGAMENTO
-    // =============================================
 
     suspend fun sincronizar(
         pagamento: PagamentoFaturaEntity,
@@ -106,10 +102,6 @@ object PagamentoFaturaSyncRepository {
     }
 
 
-    // =============================================
-    // ROOM -> SUPABASE
-    // SINCRONIZA TODOS
-    // =============================================
 
     suspend fun sincronizarTodos(
         pagamentos: List<PagamentoFaturaEntity>,
@@ -130,10 +122,6 @@ object PagamentoFaturaSyncRepository {
     }
 
 
-    // =============================================
-    // SUPABASE -> ROOM
-    // DISPOSITIVO NOVO
-    // =============================================
 
     suspend fun baixarTodosParaRoom(
         pagamentoFaturaDao: PagamentoFaturaDao,
@@ -288,10 +276,6 @@ object PagamentoFaturaSyncRepository {
         return quantidadeAlterada
     }
 
-    // =============================================
-// EXCLUSÃO
-// SUPABASE
-// =============================================
 
     suspend fun excluir(
         syncId: String

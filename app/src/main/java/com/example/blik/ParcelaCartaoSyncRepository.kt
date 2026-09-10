@@ -4,10 +4,6 @@ import io.github.jan.supabase.postgrest.from
 
 object ParcelaCartaoSyncRepository {
 
-    // =============================================
-    // ROOM -> SUPABASE
-    // SINCRONIZA UMA PARCELA
-    // =============================================
 
     suspend fun sincronizar(
         parcela: ParcelaCartaoEntity,
@@ -97,10 +93,6 @@ object ParcelaCartaoSyncRepository {
     }
 
 
-    // =============================================
-    // ROOM -> SUPABASE
-    // SINCRONIZA TODAS
-    // =============================================
 
     suspend fun sincronizarTodos(
         parcelas: List<ParcelaCartaoEntity>,
@@ -121,10 +113,6 @@ object ParcelaCartaoSyncRepository {
     }
 
 
-    // =============================================
-    // SUPABASE -> ROOM
-    // DISPOSITIVO NOVO
-    // =============================================
 
     suspend fun baixarTodasParaRoom(
         parcelaCartaoDao: ParcelaCartaoDao,

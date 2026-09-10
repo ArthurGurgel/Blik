@@ -29,7 +29,6 @@ object MigracaoSupabaseRepository {
                 }
 
             if (existentePorId != null) {
-                // Esta conta já foi migrada.
                 return@forEach
             }
 

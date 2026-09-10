@@ -134,8 +134,6 @@ fun calcularLimiteUtilizadoCartao(
     pagamentosFatura: List<PagamentoFaturaEntity>
 ): Double {
 
-    // Soma tudo que ainda compromete o limite:
-    // faturas atuais + parcelas futuras.
     val totalParcelasComprometidas =
         parcelasCartao
             .filter { parcela ->
@@ -147,7 +145,6 @@ fun calcularLimiteUtilizadoCartao(
             }
 
 
-    // Cada pagamento de fatura libera aquela parte do limite.
     val totalPago =
         pagamentosFatura
             .filter { pagamento ->
@@ -223,12 +220,10 @@ class MainActivity :
             val corBarrasSistema =
                 if (usarTemaEscuro) {
 
-                    // mesmo fundo escuro principal do Blik
                     Color(0xFF0E1211)
 
                 } else {
 
-                    // mesmo fundo claro principal do Blik
                     Color(0xFFF7F8F8)
                 }
 
@@ -241,9 +236,6 @@ class MainActivity :
                         window.decorView
                     )
 
-
-                // Ícones ESCUROS no tema claro
-                // Ícones CLAROS no tema escuro
                 controladorBarras
                     .isAppearanceLightStatusBars =
                     !usarTemaEscuro
@@ -562,11 +554,6 @@ fun BlikApp(
                                             novaSenha
                                     )
 
-
-                                // Após alterar a senha,
-                                // encerra a sessão criada
-                                // pelo link de recuperação.
-
                                 try {
 
                                     AuthRepository
@@ -576,8 +563,6 @@ fun BlikApp(
                                     _: Exception
                                 ) {
 
-                                    // A senha já foi
-                                    // alterada com sucesso.
                                 }
 
 
@@ -817,16 +802,6 @@ fun AppFinanceiro(
     modoTema: ModoTema,
     onModoTemaAlterado: (ModoTema) -> Unit
 ) {
-
-// =====================================================
-// PLANO DO USUÁRIO
-// =====================================================
-
-// TEMPORÁRIO:
-// durante o desenvolvimento usamos PRO para permitir
-// testar todos os recursos premium.
-// Futuramente este valor virá da assinatura do usuário.
-
     val planoAtual =
         PlanoUsuario.PRO
 
@@ -908,10 +883,6 @@ fun AppFinanceiro(
                                 System.currentTimeMillis()
                             )
 
-                            // =============================================
-                            // CONTAS
-                            // =============================================
-
                             put(
                                 "contas",
                                 org.json.JSONArray().apply {
@@ -943,11 +914,6 @@ fun AppFinanceiro(
                                 }
                             )
 
-
-                            // =============================================
-                            // CATEGORIAS
-                            // =============================================
-
                             put(
                                 "categorias",
                                 org.json.JSONArray().apply {
@@ -971,11 +937,6 @@ fun AppFinanceiro(
                                     }
                                 }
                             )
-
-
-                            // =============================================
-                            // CARTÕES
-                            // =============================================
 
                             put(
                                 "cartoes",
@@ -1020,11 +981,6 @@ fun AppFinanceiro(
                                     }
                                 }
                             )
-
-
-                            // =============================================
-                            // MOVIMENTAÇÕES
-                            // =============================================
 
                             put(
                                 "movimentacoes",
@@ -1101,10 +1057,6 @@ fun AppFinanceiro(
                             )
 
 
-                            // =============================================
-                            // PARCELAS
-                            // =============================================
-
                             put(
                                 "parcelas",
                                 org.json.JSONArray().apply {
@@ -1164,10 +1116,6 @@ fun AppFinanceiro(
                                 }
                             )
 
-
-                            // =============================================
-                            // PAGAMENTOS DE FATURA
-                            // =============================================
 
                             put(
                                 "pagamentosFatura",
@@ -1461,11 +1409,6 @@ fun AppFinanceiro(
             )
         }
 
-        // =============================================
-        // SUPABASE -> ROOM
-        // BAIXA CATEGORIAS EM UM DISPOSITIVO NOVO
-        // =============================================
-
         var consultaCategoriasNuvemConcluida =
             false
 
@@ -1502,8 +1445,6 @@ fun AppFinanceiro(
             }
         }
 
-        // Só cria as categorias padrão quando a consulta à nuvem
-        // terminou corretamente e não havia categorias remotas.
         if (
             categoriaDao.quantidade() == 0 &&
             consultaCategoriasNuvemConcluida
@@ -1523,10 +1464,6 @@ fun AppFinanceiro(
         }
 
 
-// =============================================
-// SUPABASE -> ROOM
-// BAIXA ORÇAMENTOS DEPOIS DAS CATEGORIAS
-// =============================================
 
         if (usuarioId != null) {
 
@@ -1554,11 +1491,6 @@ fun AppFinanceiro(
                 ).show()
             }
         }
-
-// =============================================
-// SUPABASE -> ROOM
-// BAIXA CARTÕES EM UM DISPOSITIVO NOVO
-// =============================================
 
         if (
             usuarioId != null
@@ -1591,11 +1523,6 @@ fun AppFinanceiro(
                 ).show()
             }
         }
-
-        // =============================================
-// SUPABASE -> ROOM
-// BAIXA MOVIMENTAÇÕES EM UM DISPOSITIVO NOVO
-// =============================================
 
         if (
             usuarioId != null
@@ -1630,11 +1557,6 @@ fun AppFinanceiro(
                 ).show()
             }
         }
-
-        // =============================================
-// SUPABASE -> ROOM
-// BAIXA PARCELAS EM UM DISPOSITIVO NOVO
-// =============================================
 
         if (
             usuarioId != null
@@ -1675,11 +1597,6 @@ fun AppFinanceiro(
                 ).show()
             }
         }
-
-        // =============================================
-// SUPABASE -> ROOM
-// BAIXA PAGAMENTOS EM UM DISPOSITIVO NOVO
-// =============================================
 
         if (
             usuarioId != null
@@ -1883,11 +1800,6 @@ fun AppFinanceiro(
 
             }
 
-            // =============================================
-// ROOM -> SUPABASE
-// PARCELAS
-// =============================================
-
             try {
 
                 val parcelasParaSincronizar =
@@ -1923,11 +1835,6 @@ fun AppFinanceiro(
                 ).show()
             }
 
-
-// =============================================
-// ROOM -> SUPABASE
-// PAGAMENTOS
-// =============================================
 
             try {
 
@@ -2200,7 +2107,6 @@ fun AppFinanceiro(
 
                         } else {
 
-                            // Primeiro salva no Room
                             cartaoDao.editar(
                                 id = cartao.id,
                                 nome = nomeLimpo,
@@ -2211,7 +2117,6 @@ fun AppFinanceiro(
                             )
 
 
-                            // Depois tenta sincronizar com o Supabase
                             val usuarioId =
                                 AuthRepository.usuarioAtualId()
 
@@ -2308,13 +2213,10 @@ fun AppFinanceiro(
                                         )
 
 
-                                // Primeiro Supabase
                                 CartaoSyncRepository.excluir(
                                     syncId = syncId
                                 )
 
-
-                                // Depois Room
                                 cartaoDao.excluir(
                                     cartao.id
                                 )
@@ -2393,13 +2295,11 @@ fun AppFinanceiro(
                             )
 
 
-                        // Primeiro salva localmente.
                         pagamentoFaturaDao.inserir(
                             novoPagamento
                         )
 
 
-                        // Depois tenta sincronizar.
                         val usuarioId =
                             AuthRepository.usuarioAtualId()
 
@@ -2445,11 +2345,6 @@ fun AppFinanceiro(
 
                         try {
 
-                            // =============================================
-                            // LOCALIZA A ENTITY ORIGINAL NO ROOM
-                            // PARA OBTER O syncId
-                            // =============================================
-
                             val pagamentoLocal =
                                 pagamentoFaturaDao
                                     .listarTodosUmaVez()
@@ -2468,18 +2363,11 @@ fun AppFinanceiro(
                                     )
 
 
-                            // =============================================
-                            // PRIMEIRO EXCLUI DO SUPABASE
-                            // =============================================
 
                             PagamentoFaturaSyncRepository.excluir(
                                 syncId = syncId
                             )
 
-
-                            // =============================================
-                            // SOMENTE DEPOIS EXCLUI DO ROOM
-                            // =============================================
 
                             pagamentoFaturaDao.excluir(
                                 pagamento.id
@@ -2624,14 +2512,11 @@ fun AppFinanceiro(
                                             "A categoria não possui syncId."
                                         )
 
-
-                                // Primeiro Supabase
                                 CategoriaSyncRepository.excluir(
                                     syncId = syncId
                                 )
 
 
-                                // Depois Room
                                 categoriaDao.excluir(
                                     categoria.id
                                 )
@@ -2670,9 +2555,6 @@ fun AppFinanceiro(
 
                     scope.launch {
 
-                        // =============================================
-                        // CRIA A MOVIMENTAÇÃO LOCAL
-                        // =============================================
 
                         val novaMovimentacaoEntity =
                             MovimentacaoEntity(
@@ -2714,9 +2596,6 @@ fun AppFinanceiro(
                             )
 
 
-                        // =============================================
-                        // GERA PARCELAS SE FOR COMPRA NO CRÉDITO
-                        // =============================================
 
                         if (
                             novaMovimentacao.tipo == "Saída" &&
@@ -2768,10 +2647,6 @@ fun AppFinanceiro(
                         }
 
 
-                        // =============================================
-                        // TENTA SINCRONIZAR A MOVIMENTAÇÃO
-                        // =============================================
-
                         val usuarioId =
                             AuthRepository.usuarioAtualId()
 
@@ -2788,10 +2663,6 @@ fun AppFinanceiro(
                                 val cartoesParaRelacionamento =
                                     cartaoDao.listarTodosUmaVez()
 
-
-                                // =============================================
-                                // SINCRONIZA PRIMEIRO A MOVIMENTAÇÃO
-                                // =============================================
 
                                 MovimentacaoSyncRepository.sincronizar(
                                     movimentacao =
@@ -2810,10 +2681,6 @@ fun AppFinanceiro(
                                         usuarioId
                                 )
 
-
-                                // =============================================
-                                // SINCRONIZA AS PARCELAS DA MOVIMENTAÇÃO
-                                // =============================================
 
                                 val parcelasParaSincronizar =
                                     parcelaCartaoDao
@@ -2879,11 +2746,6 @@ fun AppFinanceiro(
 
                     scope.launch {
 
-                        // =============================================
-                        // GUARDA AS PARCELAS ANTIGAS
-                        // ANTES DE ALTERAR QUALQUER COISA
-                        // =============================================
-
                         val parcelasAntigas =
                             parcelaCartaoDao
                                 .listarTodasUmaVez()
@@ -2892,10 +2754,6 @@ fun AppFinanceiro(
                                             movimentacao.id
                                 }
 
-
-                        // =============================================
-                        // PRESERVA O HISTÓRICO DAS PARCELAS
-                        // =============================================
 
                         val quitadasAnteriormentePreservadas =
                             parcelasAntigas
@@ -2908,9 +2766,6 @@ fun AppFinanceiro(
                                 .toSet()
 
 
-                        // =============================================
-                        // EDITA A MOVIMENTAÇÃO NO ROOM
-                        // =============================================
 
                         dao.editar(
                             id =
@@ -2948,19 +2803,12 @@ fun AppFinanceiro(
                         )
 
 
-                        // =============================================
-                        // REMOVE AS PARCELAS LOCAIS ANTIGAS
-                        // =============================================
 
                         parcelaCartaoDao
                             .excluirPorMovimentacao(
                                 movimentacao.id
                             )
 
-
-                        // =============================================
-                        // PREPARA AS NOVAS PARCELAS
-                        // =============================================
 
                         var parcelasNovas =
                             emptyList<ParcelaCartaoEntity>()
@@ -3012,11 +2860,6 @@ fun AppFinanceiro(
                                             quitadasAnteriormentePreservadas
                                     )
 
-
-                                // =============================================
-                                // PRESERVA O syncId DAS PARCELAS EXISTENTES
-                                // =============================================
-
                                 parcelasNovas =
                                     parcelasGeradas.map { parcelaNova ->
 
@@ -3040,8 +2883,6 @@ fun AppFinanceiro(
 
                                         } else {
 
-                                            // Parcela realmente nova.
-                                            // Mantém o UUID criado pelo Entity.
                                             parcelaNova
                                         }
                                     }
@@ -3055,10 +2896,6 @@ fun AppFinanceiro(
                         }
 
 
-                        // =============================================
-                        // SINCRONIZA COM O SUPABASE
-                        // =============================================
-
                         val usuarioId =
                             AuthRepository.usuarioAtualId()
 
@@ -3066,10 +2903,6 @@ fun AppFinanceiro(
                         if (usuarioId != null) {
 
                             try {
-
-                                // =============================================
-                                // MOVIMENTAÇÃO ATUALIZADA
-                                // =============================================
 
                                 val movimentacaoAtualizada =
                                     dao
@@ -3093,9 +2926,6 @@ fun AppFinanceiro(
                                     cartaoDao.listarTodosUmaVez()
 
 
-                                // =============================================
-                                // 1. ATUALIZA A MOVIMENTAÇÃO
-                                // =============================================
 
                                 MovimentacaoSyncRepository.sincronizar(
                                     movimentacao =
@@ -3115,9 +2945,6 @@ fun AppFinanceiro(
                                 )
 
 
-                                // =============================================
-                                // 2. ATUALIZA/CRIA AS PARCELAS ATUAIS
-                                // =============================================
 
                                 if (
                                     parcelasNovas.isNotEmpty()
@@ -3144,10 +2971,6 @@ fun AppFinanceiro(
                                 }
 
 
-                                // =============================================
-                                // 3. DESCOBRE PARCELAS QUE DEIXARAM DE EXISTIR
-                                // =============================================
-
                                 val syncIdsAtuais =
                                     parcelasNovas
                                         .mapNotNull { parcela ->
@@ -3168,10 +2991,6 @@ fun AppFinanceiro(
                                                     syncIdsAtuais
                                         }
 
-
-                                // =============================================
-                                // 4. EXCLUI AS PARCELAS OBSOLETAS DA NUVEM
-                                // =============================================
 
                                 parcelasParaExcluir
                                     .forEach { parcelaAntiga ->
@@ -3200,9 +3019,6 @@ fun AppFinanceiro(
                         }
 
 
-                        // =============================================
-                        // FINALIZA A EDIÇÃO
-                        // =============================================
 
                         movimentacaoEmEdicao =
                             null
@@ -3474,13 +3290,11 @@ fun AppFinanceiro(
                                             )
 
 
-                                    // Primeiro exclui no Supabase
                                     ContaSyncRepository.excluir(
                                         syncId = syncId
                                     )
 
 
-                                    // Depois exclui no Room
                                     contaDao.excluir(
                                         conta.id
                                     )
@@ -3578,19 +3392,12 @@ fun AppFinanceiro(
                                     )
 
 
-                            // =============================================
-                            // PRIMEIRO SUPABASE
-                            // =============================================
 
                             MovimentacaoSyncRepository.excluir(
                                 syncId = syncId
                             )
 
 
-                            // =============================================
-                            // DEPOIS ROOM
-                            // FILHOS -> PAI
-                            // =============================================
 
                             parcelaCartaoDao
                                 .excluirPorMovimentacao(
@@ -3698,11 +3505,6 @@ fun AppFinanceiro(
                                                 .writableDatabase
 
 
-                                        // =============================================
-                                        // APAGA OS DADOS ATUAIS
-                                        // FILHOS -> PAIS
-                                        // =============================================
-
                                         db.execSQL(
                                             "DELETE FROM pagamentos_fatura"
                                         )
@@ -3727,10 +3529,6 @@ fun AppFinanceiro(
                                             "DELETE FROM contas"
                                         )
 
-
-                                        // =============================================
-                                        // RESTAURA CONTAS
-                                        // =============================================
 
                                         val contasJson =
                                             backup.getJSONArray(
@@ -3778,10 +3576,6 @@ fun AppFinanceiro(
                                         }
 
 
-                                        // =============================================
-                                        // RESTAURA CATEGORIAS
-                                        // =============================================
-
                                         val categoriasJson =
                                             backup.getJSONArray(
                                                 "categorias"
@@ -3814,10 +3608,6 @@ fun AppFinanceiro(
                                             )
                                         }
 
-
-                                        // =============================================
-                                        // RESTAURA CARTÕES
-                                        // =============================================
 
                                         val cartoesJson =
                                             backup.getJSONArray(
@@ -3863,9 +3653,6 @@ fun AppFinanceiro(
                                         }
 
 
-                                        // =============================================
-                                        // RESTAURA MOVIMENTAÇÕES
-                                        // =============================================
 
                                         val movimentacoesJson =
                                             backup.getJSONArray(
@@ -3994,9 +3781,6 @@ fun AppFinanceiro(
                                         }
 
 
-                                        // =============================================
-                                        // RESTAURA PARCELAS
-                                        // =============================================
 
                                         val parcelasJson =
                                             backup.getJSONArray(
@@ -4066,10 +3850,6 @@ fun AppFinanceiro(
                                         }
 
 
-                                        // =============================================
-                                        // RESTAURA PAGAMENTOS DE FATURA
-                                        // =============================================
-
                                         val pagamentosJson =
                                             backup.getJSONArray(
                                                 "pagamentosFatura"
@@ -4126,10 +3906,6 @@ fun AppFinanceiro(
                                     }
                                 }
 
-
-                                // =============================================
-                                // SUCESSO
-                                // =============================================
 
                                 mostrarConfirmacaoRestauracao =
                                     false
@@ -4957,10 +4733,6 @@ fun TelaInicial(
                         }
 
 
-// =====================================================
-// CARD PRINCIPAL - SALDO
-// =====================================================
-
                     Card(
                         modifier =
                             Modifier.fillMaxWidth(),
@@ -4974,7 +4746,6 @@ fun TelaInicial(
                                     if (usarTemaEscuro) {
                                         Color.Transparent
                                     } else {
-                                        // mantém o verde original no tema claro
                                         MaterialTheme.colorScheme.primaryContainer
                                     }
                             ),
@@ -4997,7 +4768,6 @@ fun TelaInicial(
                                     Modifier
                                         .fillMaxWidth()
 
-                                        // fundo grafite refinado
                                         .background(
                                             brush =
                                                 Brush.linearGradient(
@@ -5024,7 +4794,6 @@ fun TelaInicial(
                                                 )
                                         )
 
-                                        // contorno discreto
                                         .border(
                                             width =
                                                 1.dp,
@@ -5046,9 +4815,6 @@ fun TelaInicial(
                                         )
 
                                 } else {
-
-                                    // no claro não aplicamos gradiente,
-                                    // brilho ou outro efeito.
                                     Modifier
                                         .fillMaxWidth()
                                         .padding(
@@ -5062,10 +4828,6 @@ fun TelaInicial(
                                 modifier =
                                     Modifier.fillMaxWidth()
                             ) {
-
-                                // =========================================
-                                // SALDO TOTAL
-                                // =========================================
 
                                 Text(
                                     text =
@@ -5114,10 +4876,6 @@ fun TelaInicial(
                                 )
 
 
-                                // =========================================
-                                // ENTRADAS / PERÍODO / SAÍDAS
-                                // =========================================
-
                                 Row(
                                     modifier =
                                         Modifier.fillMaxWidth(),
@@ -5125,10 +4883,6 @@ fun TelaInicial(
                                     verticalAlignment =
                                         Alignment.Top
                                 ) {
-
-                                    // =====================================
-                                    // ENTRADAS
-                                    // =====================================
 
                                     Column(
                                         modifier =
@@ -5183,10 +4937,6 @@ fun TelaInicial(
                                     }
 
 
-                                    // =====================================
-                                    // PERÍODO
-                                    // =====================================
-
                                     Column(
                                         modifier =
                                             Modifier.weight(1.15f),
@@ -5233,10 +4983,6 @@ fun TelaInicial(
                                         )
                                     }
 
-
-                                    // =====================================
-                                    // SAÍDAS
-                                    // =====================================
 
                                     Column(
                                         modifier =
@@ -5583,9 +5329,6 @@ fun TelaInicial(
                                         .padding(16.dp)
                             ) {
 
-                                // =============================================
-                                // CARTÃO + STATUS
-                                // =============================================
 
                                 Row(
                                     modifier =
@@ -5666,10 +5409,6 @@ fun TelaInicial(
                                         fatura.vencimento
                                     }
 
-
-                                // =============================================
-                                // DATA + VALOR
-                                // =============================================
 
                                 Row(
                                     modifier =
@@ -5795,10 +5534,6 @@ fun TelaInicial(
                                     }
 
 
-// =============================================
-// TÍTULO + PERCENTUAL
-// =============================================
-
                                 Row(
                                     modifier =
                                         Modifier.fillMaxWidth(),
@@ -5833,10 +5568,6 @@ fun TelaInicial(
                                     modifier = Modifier.height(6.dp)
                                 )
 
-
-// =============================================
-// BARRA
-// =============================================
 
                                 Box(
                                     modifier =
@@ -5877,10 +5608,6 @@ fun TelaInicial(
                                     modifier = Modifier.height(10.dp)
                                 )
 
-
-// =============================================
-// UTILIZADO + DISPONÍVEL
-// =============================================
 
                                 Row(
                                     modifier =
@@ -5989,14 +5716,11 @@ fun TelaNovaMovimentacao(
         mutableStateOf("")
     }
 
-    // POPUPS
 
     var mostrarCalendario by remember {
         mutableStateOf(false)
     }
 
-
-    // CARREGA DADOS QUANDO FOR EDIÇÃO
 
     LaunchedEffect(
         contas,
@@ -6106,7 +5830,6 @@ fun TelaNovaMovimentacao(
                     modifier = Modifier.height(14.dp)
                 )
 
-                // VALOR
 
                 OutlinedTextField(
                     value = valor,
@@ -6139,7 +5862,6 @@ fun TelaNovaMovimentacao(
                 )
 
 
-                // TIPO
 
                 Text(
                     text = "Tipo",
@@ -6221,10 +5943,6 @@ fun TelaNovaMovimentacao(
                     }
                 )
 
-
-                // -------------------------
-                // ENTRADA
-                // -------------------------
 
                 if (tipo == "Entrada") {
 
@@ -6308,10 +6026,6 @@ fun TelaNovaMovimentacao(
                 }
 
 
-                // -------------------------
-                // SAÍDA
-                // -------------------------
-
                 if (tipo == "Saída") {
 
                     Spacer(
@@ -6372,8 +6086,6 @@ fun TelaNovaMovimentacao(
                     )
 
 
-                    // SAÍDA PELA CONTA
-
                     if (formaPagamento == "Conta") {
 
                         Spacer(
@@ -6416,8 +6128,6 @@ fun TelaNovaMovimentacao(
                         )
                     }
 
-
-                    // SAÍDA NO CRÉDITO
 
                     if (formaPagamento == "Crédito") {
 
@@ -6565,10 +6275,6 @@ fun TelaNovaMovimentacao(
                 }
 
 
-                // -------------------------
-                // TRANSFERÊNCIA
-                // -------------------------
-
                 if (tipo == "Transferência") {
 
                     Spacer(
@@ -6609,8 +6315,6 @@ fun TelaNovaMovimentacao(
                             contaSelecionada =
                                 novaConta
 
-                            // Se a nova origem for igual ao destino
-                            // anteriormente selecionado, limpa o destino.
                             if (
                                 contaDestinoSelecionada?.id ==
                                 novaConta?.id
@@ -6670,8 +6374,6 @@ fun TelaNovaMovimentacao(
                 }
 
 
-                // DATA
-
                 if (tipo.isNotBlank()) {
 
                     Spacer(
@@ -6715,7 +6417,6 @@ fun TelaNovaMovimentacao(
                 }
 
 
-                // MENSAGEM
 
                 if (mensagem.isNotBlank()) {
 
@@ -6753,7 +6454,6 @@ fun TelaNovaMovimentacao(
                 }
 
 
-                // SALVAR
 
                 if (tipo.isNotBlank()) {
 
@@ -7029,10 +6729,6 @@ fun TelaNovaMovimentacao(
             }
         }
 
-        // =====================================================
-        // CALENDÁRIO
-        // =====================================================
-
         if (mostrarCalendario) {
 
             val datePickerState =
@@ -7153,7 +6849,6 @@ fun ContaItem(
                 androidx.compose.ui.Alignment.CenterVertically
         ) {
 
-            // ÍCONE DA CONTA
             Box(
                 modifier =
                     Modifier
@@ -7188,8 +6883,6 @@ fun ContaItem(
                     Modifier.width(14.dp)
             )
 
-
-            // NOME DA CONTA
             Column(
                 modifier =
                     Modifier.weight(1f)
@@ -7220,7 +6913,6 @@ fun ContaItem(
             }
 
 
-            // SALDO
             Text(
                 text = saldo,
                 fontSize = 16.sp,
@@ -7501,9 +7193,6 @@ fun TelaContas(
         }
     }
 
-    // =====================================================
-// NOVA CONTA
-// =====================================================
 
     if (mostrarNovaConta) {
 
@@ -8260,7 +7949,6 @@ fun TelaCartoes(
                                     .padding(16.dp)
                         ) {
 
-                            // CABEÇALHO
                             Row(
                                 modifier =
                                     Modifier.fillMaxWidth(),
@@ -8345,8 +8033,6 @@ fun TelaCartoes(
                                     Modifier.height(16.dp)
                             )
 
-
-                            // LIMITE
                             Row(
                                 modifier =
                                     Modifier.fillMaxWidth(),
@@ -8504,7 +8190,6 @@ fun TelaCartoes(
                             )
 
 
-                            // FECHAMENTO E VENCIMENTO
                             Row(
                                 modifier =
                                     Modifier.fillMaxWidth(),
@@ -9703,7 +9388,6 @@ fun TelaCategorias(
     }
 
 
-    // EDITAR CATEGORIA
 
     categoriaParaEditar?.let { categoria ->
 
@@ -9795,7 +9479,6 @@ fun TelaCategorias(
     }
 
 
-    // CONFIRMAÇÃO DE EXCLUSÃO
 
     categoriaParaExcluir?.let { categoria ->
 
@@ -9860,7 +9543,6 @@ fun TelaCategorias(
     }
 
 
-    // RESULTADO DA EXCLUSÃO
 
     if (mensagemExclusao.isNotBlank()) {
 
@@ -10249,9 +9931,6 @@ fun TelaHistorico(
                 )
 
 
-                // =============================================
-                // CABEÇALHO
-                // =============================================
 
                 Text(
                     text = "Histórico",
@@ -10277,10 +9956,6 @@ fun TelaHistorico(
                     modifier = Modifier.height(20.dp)
                 )
 
-
-                // =============================================
-                // MÊS E ANO
-                // =============================================
 
                 Row(
                     modifier =
@@ -10337,9 +10012,6 @@ fun TelaHistorico(
                 }
 
 
-                // =============================================
-                // FILTROS ADICIONAIS
-                // =============================================
 
                 val quantidadeFiltrosAtivos =
                     listOf(
@@ -10534,7 +10206,6 @@ fun TelaHistorico(
                         ) {
 
 
-                            // DESCRIÇÃO + VALOR
                             Row(
                                 modifier =
                                     Modifier.fillMaxWidth(),
@@ -10886,9 +10557,6 @@ fun TelaHistorico(
                     ) {
 
 
-                        // =====================================
-                        // VALOR
-                        // =====================================
 
                         Box(
                             modifier =
@@ -10948,10 +10616,6 @@ fun TelaHistorico(
                                 Modifier.height(18.dp)
                         )
 
-
-                        // =====================================
-                        // DETALHES
-                        // =====================================
 
                         when {
 
@@ -11212,8 +10876,6 @@ fun TelaFaturas(
     }
 
 
-    // PAGAMENTO
-
     var cartaoParaPagamento by remember {
         mutableStateOf<Int?>(null)
     }
@@ -11321,9 +10983,6 @@ fun TelaFaturas(
                 .fillMaxSize()
         ) {
 
-            // =====================================================
-            // CABEÇALHO
-            // =====================================================
 
             item {
 
@@ -11363,7 +11022,6 @@ fun TelaFaturas(
                         Arrangement.spacedBy(10.dp)
                 ) {
 
-                    // MÊS
                     DropdownBlik(
                         valorSelecionado =
                             nomesMeses[
@@ -11391,7 +11049,6 @@ fun TelaFaturas(
                     )
 
 
-                    // ANO
                     DropdownBlik(
                         valorSelecionado =
                             anoSelecionado.toString(),
@@ -11423,9 +11080,6 @@ fun TelaFaturas(
             }
 
 
-            // =====================================================
-            // SEM FATURA
-            // =====================================================
 
             if (parcelasDaFatura.isEmpty()) {
 
@@ -11565,9 +11219,6 @@ fun TelaFaturas(
                 }
             } else {
 
-                // =================================================
-                // FATURAS AGRUPADAS POR CARTÃO
-                // =================================================
 
                 faturasPorCartao.forEach {
                         (_, parcelasCartao) ->
@@ -11717,9 +11368,6 @@ fun TelaFaturas(
                             ) {
 
 
-                                // =========================================
-                                // CARTÃO + STATUS
-                                // =========================================
 
                                 Row(
                                     modifier =
@@ -11783,9 +11431,6 @@ fun TelaFaturas(
                                 )
 
 
-                                // =========================================
-                                // EM ABERTO / PAGA
-                                // =========================================
 
                                 if (restante > 0.01) {
 
@@ -11835,9 +11480,6 @@ fun TelaFaturas(
                                 }
 
 
-                                // =========================================
-                                // DATAS
-                                // =========================================
 
                                 if (
                                     fechamento != null &&
@@ -11915,10 +11557,6 @@ fun TelaFaturas(
                                 }
 
 
-                                // =========================================
-                                // CONTEÚDO EXPANDIDO
-                                // =========================================
-
                                 if (estaExpandido) {
 
                                     Spacer(
@@ -11938,7 +11576,6 @@ fun TelaFaturas(
                                     )
 
 
-                                    // TOTAL / PAGO
                                     Row(
                                         modifier =
                                             Modifier.fillMaxWidth(),
@@ -12001,10 +11638,6 @@ fun TelaFaturas(
                                         }
                                     }
 
-
-                                    // =====================================
-                                    // PAGAR FATURA
-                                    // =====================================
 
                                     if (restante > 0.01) {
 
@@ -12087,10 +11720,6 @@ fun TelaFaturas(
                                             Modifier.height(20.dp)
                                     )
 
-
-                                    // =====================================
-                                    // COMPRAS
-                                    // =====================================
 
                                     Text(
                                         text = "Compras",
@@ -12226,9 +11855,6 @@ fun TelaFaturas(
                                         }
 
 
-                                    // =====================================
-                                    // PAGAMENTOS
-                                    // =====================================
 
                                     if (
                                         pagamentosDoCartao.isNotEmpty()
@@ -12350,9 +11976,6 @@ fun TelaFaturas(
                 )
             }
         }
-        // =========================================================
-        // POPUP - PAGAR FATURA
-        // =========================================================
 
         if (cartaoParaPagamento != null) {
 
@@ -12407,9 +12030,6 @@ fun TelaFaturas(
                     ) {
 
 
-                        // =========================================
-                        // VALOR EM ABERTO
-                        // =========================================
 
                         Box(
                             modifier =
@@ -12472,9 +12092,6 @@ fun TelaFaturas(
                         )
 
 
-                        // =========================================
-                        // VALOR DO PAGAMENTO
-                        // =========================================
 
                         OutlinedTextField(
                             value =
@@ -12511,10 +12128,6 @@ fun TelaFaturas(
                                 Modifier.height(16.dp)
                         )
 
-
-                        // =========================================
-                        // CONTA
-                        // =========================================
 
                         Text(
                             text = "Conta do pagamento",
@@ -12585,10 +12198,6 @@ fun TelaFaturas(
                         )
 
 
-                        // =========================================
-                        // DATA
-                        // =========================================
-
                         Text(
                             text = "Data do pagamento",
 
@@ -12638,10 +12247,6 @@ fun TelaFaturas(
                             )
                         }
 
-
-                        // =========================================
-                        // ERRO
-                        // =========================================
 
                         if (
                             mensagemPagamento
@@ -12791,10 +12396,6 @@ fun TelaFaturas(
                             Modifier.fillMaxWidth()
                     ) {
 
-
-                        // =====================================
-                        // VALOR
-                        // =====================================
 
                         Box(
                             modifier =
@@ -12951,9 +12552,6 @@ fun TelaFaturas(
         }
 
 
-        // =========================================================
-        // CALENDÁRIO - PAGAMENTO
-        // =========================================================
 
         if (mostrarCalendarioPagamento) {
 
@@ -13058,11 +12656,6 @@ fun gerarParcelasCartao(
     diaFechamento: Int,
     diaVencimento: Int,
 
-    // null = movimentação nova:
-    // calcula automaticamente o histórico.
-    //
-    // Set, mesmo vazio = edição:
-    // preserva exatamente o histórico já existente.
     quitadasAnteriormentePreservadas: Set<Int>? = null
 
 ): List<ParcelaCartaoEntity> {
@@ -13088,9 +12681,6 @@ fun gerarParcelasCartao(
             ?: return emptyList()
 
 
-    // =====================================================
-    // PRIMEIRA FATURA
-    // =====================================================
 
     var mesPrimeiraFatura =
         mesCompra
@@ -13111,9 +12701,6 @@ fun gerarParcelasCartao(
     }
 
 
-    // =====================================================
-    // DATA ATUAL SEM HORÁRIO
-    // =====================================================
 
     val hoje =
         java.util.Calendar
@@ -13142,10 +12729,6 @@ fun gerarParcelasCartao(
             }
 
 
-    // =====================================================
-    // VALOR DAS PARCELAS EM CENTAVOS
-    // =====================================================
-
     val valorTotalCentavos =
         kotlin.math.round(
             valorTotal * 100
@@ -13162,15 +12745,11 @@ fun gerarParcelasCartao(
                 quantidadeParcelas
 
 
-    // =====================================================
-    // GERAR PARCELAS
-    // =====================================================
 
     return (1..quantidadeParcelas)
         .map { numero ->
 
 
-            // Descobre mês/ano da parcela
             val calendarioFatura =
                 java.util.Calendar
                     .getInstance()
@@ -13212,9 +12791,6 @@ fun gerarParcelasCartao(
                 )
 
 
-            // =============================================
-            // VENCIMENTO DA FATURA
-            // =============================================
 
             val vencimento =
                 calcularVencimentoFatura(
@@ -13232,35 +12808,21 @@ fun gerarParcelasCartao(
                 )
 
 
-            // =============================================
-            // HISTÓRICO
-            // =============================================
 
             val quitadaAnteriormente =
                 if (
                     quitadasAnteriormentePreservadas != null
                 ) {
 
-                    // EDIÇÃO:
-                    // não recalcula com base na data de hoje.
                     numero in
                             quitadasAnteriormentePreservadas
 
                 } else {
 
-                    // NOVA MOVIMENTAÇÃO:
-                    // se o vencimento daquela parcela já passou,
-                    // consideramos que ela foi quitada antes
-                    // do controle pelo Blik.
                     vencimento.before(
                         hoje
                     )
                 }
-
-
-            // =============================================
-            // VALOR
-            // =============================================
 
             val valorParcelaCentavos =
                 if (

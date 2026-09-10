@@ -13,9 +13,6 @@ enum class PlanoUsuario {
 
 enum class RecursoBlik {
 
-    // =========================================
-    // FREE
-    // =========================================
 
     CONTAS,
 
@@ -40,9 +37,6 @@ enum class RecursoBlik {
     TUTORIAL,
 
 
-    // =========================================
-    // PRO
-    // =========================================
 
     ORCAMENTO_TOTAL,
 
@@ -71,10 +65,6 @@ enum class RecursoBlik {
     BLIK_WEB,
 
 
-    // =========================================
-    // PRO CONECTADO
-    // =========================================
-
     OPEN_FINANCE,
 
     IMPORTACAO_BANCARIA,
@@ -93,9 +83,6 @@ object PermissoesPlanoBlik {
         return when (recurso) {
 
 
-            // =====================================
-            // FREE
-            // =====================================
 
             RecursoBlik.CONTAS,
             RecursoBlik.CATEGORIAS,
@@ -111,10 +98,6 @@ object PermissoesPlanoBlik {
 
                 PlanoUsuario.FREE
 
-
-            // =====================================
-            // PRO
-            // =====================================
 
             RecursoBlik.ORCAMENTO_TOTAL,
             RecursoBlik.ORCAMENTO_CATEGORIA,
@@ -133,9 +116,6 @@ object PermissoesPlanoBlik {
                 PlanoUsuario.PRO
 
 
-            // =====================================
-            // PRO CONECTADO
-            // =====================================
 
             RecursoBlik.OPEN_FINANCE,
             RecursoBlik.IMPORTACAO_BANCARIA,

@@ -57,11 +57,6 @@ object CategoriaSyncRepository {
 
 
             if (categoriaLocal == null) {
-
-                // =============================================
-                // EXISTE NA NUVEM, MAS NÃO NESTE APARELHO
-                // =============================================
-
                 val resultado =
                     categoriaDao.inserir(
                         CategoriaEntity(
@@ -85,11 +80,6 @@ object CategoriaSyncRepository {
                 quantidadeAlterada++
 
             } else {
-
-                // =============================================
-                // JÁ EXISTE LOCALMENTE.
-                // VERIFICA SE O NOME MUDOU NA NUVEM
-                // =============================================
 
                 if (
                     categoriaLocal.nome !=

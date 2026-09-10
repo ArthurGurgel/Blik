@@ -63,11 +63,6 @@ object ContaSyncRepository {
 
             if (contaLocal == null) {
 
-                // =============================================
-                // CONTA EXISTE NA NUVEM,
-                // MAS AINDA NÃO EXISTE NESTE APARELHO
-                // =============================================
-
                 val resultado =
                     contaDao.inserir(
                         ContaEntity(
@@ -97,12 +92,6 @@ object ContaSyncRepository {
                 quantidadeAlterada++
 
             } else {
-
-                // =============================================
-                // CONTA JÁ EXISTE LOCALMENTE.
-                // VERIFICA SE A NUVEM TEM DADOS DIFERENTES.
-                // =============================================
-
                 val precisaAtualizar =
                     contaLocal.nome !=
                             contaRemota.nome ||

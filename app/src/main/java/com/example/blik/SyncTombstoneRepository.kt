@@ -48,11 +48,6 @@ object SyncTombstoneRepository {
             0
 
 
-        // =============================================
-        // FILHOS PRIMEIRO
-        // =============================================
-
-
         exclusoes
             .filter {
                 it.tipoEntidade ==
